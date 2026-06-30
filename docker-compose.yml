@@ -20,9 +20,10 @@ services:
 
   web:
     build: .
-    # Live-reload for development: the current directory is mounted over the image's
-    # /app, and uvicorn watches it. Edits on the host are reflected immediately.
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+    # Production: run the code baked into the image, no live reload. (For local
+    # development, add `--reload --reload-dir /app/app` and the `.:/app` bind mount
+    # below to get edit-on-save.)
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       db:
         condition: service_healthy
@@ -45,9 +46,8 @@ services:
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
       EMAIL_FROM: ${EMAIL_FROM:-todo@localhost}
     volumes:
-      # Mount the project source for live reload. /data is a separate path, so the
-      # persistent volume below is unaffected by this bind mount.
-      - .:/app
+      # Persistent storage for uploaded files. (For local development, also add
+      # `- .:/app` to mount the project source for live reload.)
       - todo-data:/data
     restart: unless-stopped
     healthcheck:

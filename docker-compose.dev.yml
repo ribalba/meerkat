@@ -1,0 +1,16 @@
+# Development overlay: re-adds live-reload on top of docker-compose.yml.
+#
+# Run with both files so this one's settings win:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# Uvicorn watches the bind-mounted source, so edits on the host are reflected
+# immediately. The base file's production command and image-only code are kept
+# untouched for real deployments.
+services:
+  web:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+    volumes:
+      # Mount the project source over the image's /app for edit-on-save. The
+      # base file's todo-data:/data mount is merged in automatically, so uploads
+      # still persist and are unaffected by this bind mount.
+      - .:/app
