@@ -27,7 +27,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8086:8000"
     environment:
       # Public URL used to build login + share links in emails.
       BASE_URL: ${BASE_URL:-http://localhost:8000}
