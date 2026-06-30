@@ -35,6 +35,10 @@ def send_email(to: str, subject: str, body: str) -> None:
     msg["From"] = formataddr((APP_NAME, settings.email_from))
     msg["To"] = to
     msg["Subject"] = subject
+    # Disable Brevo/Sendinblue (Mailin) open and click tracking on a per-email basis.
+    msg["X-Mailin-Track"] = "false"
+    msg["X-Mailin-Track-Clicks"] = "false"
+    msg["X-Mailin-Track-Opens"] = "false"
     msg.set_content(body)
 
     try:
