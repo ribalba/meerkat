@@ -9,6 +9,10 @@
 services:
   web:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+    ports:
+      # Dev runs on a different host port (8087) so it can sit alongside a
+      # production stack (8086) without a clash.
+      - "8087:8000"
     volumes:
       # Mount the project source over the image's /app for edit-on-save. The
       # base file's todo-data:/data mount is merged in automatically, so uploads

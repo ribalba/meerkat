@@ -49,7 +49,20 @@ DATABASE_URL=postgresql+psycopg2://meerato:meerato@localhost:5432/meerato \
   .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
-Open http://localhost:8000.
+Open http://localhost:8086 (Docker Compose) or http://localhost:8000 (running
+uvicorn directly).
+
+### Development with Docker Compose
+
+For live-reload inside Docker, run with the dev overlay. It bind-mounts the source
+and restarts uvicorn on every edit:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+The dev container runs on **port 8087** (http://localhost:8087) so it can sit
+alongside a production stack (port 8086) without a clash.
 
 1. Enter your email and submit. **In dev mode the sign-in link is printed to the
    terminal** (no SMTP configured) — copy the `…/api/auth/callback?token=…` URL
