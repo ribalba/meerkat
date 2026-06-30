@@ -1,0 +1,38 @@
+{
+  "name": "meerato-desktop",
+  "productName": "Meerato",
+  "version": "1.0.0",
+  "description": "Desktop wrapper for the Meerato to-do app.",
+  "main": "main.js",
+  "author": "Meerato",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "42.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.meerato.desktop",
+    "productName": "Meerato",
+    "directories": { "buildResources": "build", "output": "dist" },
+    "files": ["main.js", "package.json"],
+    "protocols": [
+      { "name": "Meerato", "schemes": ["meerato"] }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office"
+    }
+  }
+}

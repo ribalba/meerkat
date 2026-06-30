@@ -1,0 +1,621 @@
+/* App shell: boot/login, the app frame (resizer, dropzone, global event binding),
+ * the status/bucket filters, the main-pane panels (Automation/API/Watching),
+ * the search overlay, Settings, and new-account defaults. */
+(function () {
+  "use strict";
+
+  const App = window.App;
+  const {
+    $, esc, state, toast, errText, parseSearch, STATUS,
+    liveBuckets, labelOf, viewMeta, defaultLabel, getViewOrder, saveLabel,
+    loadLabels, initCommentSeen, openNotifList, markCommentsSeen,
+  } = App;
+
+  // Running inside the Electron desktop shell? Then magic-link sign-in needs a
+  // meerato:// deep link so the session lands in the app (see electron/README.md).
+  const IS_DESKTOP = /Electron/i.test(navigator.userAgent);
+
+  // ===================== Boot =====================
+
+  // Fade out and remove the initial loading splash once we know what to render.
+  function hideLoader() {
+    const el = document.getElementById("app-loader");
+    if (!el) return;
+    el.classList.add("loaded");
+    setTimeout(() => el.remove(), 450);
+  }
+
+  async function boot() {
+    if ("serviceWorker" in navigator) {
+      // Register after `load` so installing/precaching never competes with the
+      // initial navigation and critical resources — registering during boot lets
+      // the worker's install fetches stall first paint.
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+    bindConnection();
+    try {
+      state.user = await API.get("/api/auth/me");
+    } catch (e) {
+      return showLogin();
+    }
+    showApp();
+  }
+
+  function bindConnection() {
+    const upd = () => {
+      const on = navigator.onLine;
+      $("#sync-now")
+        .toggleClass("online", on)
+        .toggleClass("offline", !on)
+        .attr("title", on ? "Online — click to sync" : "Offline — changes will sync when reconnected");
+    };
+    window.addEventListener("online", upd);
+    window.addEventListener("offline", upd);
+    upd();
+  }
+
+  // ===================== Login =====================
+
+  function showLogin() {
+    hideLoader();
+    $("#app").hide();
+    $("#login").show();
+    $("#login-form").on("submit", async (e) => {
+      e.preventDefault();
+      const email = $("#login-email").val().trim();
+      if (!email) return;
+      try {
+        const r = await API.post("/api/auth/login", { email, client: IS_DESKTOP ? "desktop" : undefined });
+        $("#login-message")
+          .removeClass("hidden negative")
+          .addClass("positive visible")
+          .html("<i class='check icon'></i>" + esc(r.message));
+      } catch (err) {
+        $("#login-message")
+          .removeClass("hidden positive")
+          .addClass("negative visible")
+          .text(err.detail || "Something went wrong.");
+      }
+    });
+
+    // Compact header login: same magic-link flow, result shown as a toast.
+    $("#nav-login-form").on("submit", async (e) => {
+      e.preventDefault();
+      const email = $("#nav-login-email").val().trim();
+      if (!email) return;
+      try {
+        const r = await API.post("/api/auth/login", { email, client: IS_DESKTOP ? "desktop" : undefined });
+        $("#nav-login-email").val("");
+        toast("<i class='check icon'></i>" + esc(r.message), "success");
+      } catch (err) {
+        toast(err.detail || "Something went wrong.", "error");
+      }
+    });
+  }
+
+  // ===================== App shell =====================
+
+  async function showApp() {
+    $("#login").hide();
+    $("#app").css("display", "flex");
+    // Fade out the splash; the 0.4s fade overlaps the first render below so the
+    // app doesn't flash empty before the sidebar and list are populated.
+    hideLoader();
+
+    // If a different account than last time is signing in on this browser, wipe the
+    // local mirror so we never show another user's data.
+    const prevUser = await DB.getMeta("current_user", null);
+    if (prevUser && prevUser !== state.user.id) {
+      await clearLocalData();
+    }
+    await DB.setMeta("current_user", state.user.id);
+
+    Sync.start();
+    Sync.onChange(onDataChanged);
+
+    // Guess the timezone from the browser the first time (server default is UTC).
+    if (state.user && state.user.timezone === "UTC") {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz && tz !== "UTC") {
+          const u = await API.patch("/api/auth/me", { timezone: tz });
+          state.user.timezone = u.timezone;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    bindShellEvents();
+    setupResizer();
+    setupDetailDropzone();
+    await loadLabels();
+    await App.renderViews();
+
+    // First-time: ask for a name (used in watcher emails) and explain why.
+    if (state.user && !state.user.name && !localStorage.getItem("name_prompted")) {
+      promptForName();
+    }
+
+    // Initial sync, then render. If offline, render from whatever is cached.
+    try { await Sync.flush(); } catch (e) { /* offline */ }
+    await ensureDefaultBuckets();
+    await initCommentSeen();
+    await App.renderAll();
+
+    // Deep links: /?watch=<public_token> opens the Watching tab with that shared
+    // task selected (from the public share page); /?todo=<id> from an invite/access
+    // link (may be a task shared with me, not one I own); /?watching=1 to open the
+    // Watching page.
+    const params = new URLSearchParams(location.search);
+    const watchToken = params.get("watch");
+    const todoId = params.get("todo");
+    if (watchToken) {
+      history.replaceState({}, "", "/");
+      App.openWatchingTask(watchToken);
+    } else if (todoId) {
+      history.replaceState({}, "", "/");
+      App.openTaskOrWatched(todoId);
+    } else if (params.get("watching")) {
+      history.replaceState({}, "", "/");
+      enterWatching();
+    }
+  }
+
+  // Drag the gutter to resize the list vs. detail columns; width is remembered.
+  function applyDetailWidth() {
+    const w = parseInt(localStorage.getItem("detail_width") || "", 10);
+    if (w) document.getElementById("detail-pane").style.flex = `0 0 ${w}px`;
+  }
+
+  function setupResizer() {
+    const resizer = document.getElementById("detail-resizer");
+    const layout = document.getElementById("layout");
+    const pane = document.getElementById("detail-pane");
+    let dragging = false;
+
+    const onMove = (e) => {
+      if (!dragging) return;
+      const rect = layout.getBoundingClientRect();
+      const max = rect.width - 360; // keep room for the list
+      const w = Math.max(320, Math.min(max, rect.right - e.clientX));
+      pane.style.flex = `0 0 ${w}px`;
+      localStorage.setItem("detail_width", String(Math.round(w)));
+    };
+    const stop = () => {
+      if (!dragging) return;
+      dragging = false;
+      resizer.classList.remove("dragging");
+      document.body.classList.remove("resizing");
+    };
+    resizer.addEventListener("mousedown", (e) => {
+      dragging = true;
+      resizer.classList.add("dragging");
+      document.body.classList.add("resizing");
+      e.preventDefault();
+    });
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", stop);
+  }
+
+  // Drag a file anywhere onto the open task's detail pane to attach it. Bound once
+  // on the persistent #detail-pane (not in initDetail, which re-renders per task);
+  // it reads state.currentTodoId so it always targets the open task.
+  function setupDetailDropzone() {
+    const pane = document.getElementById("detail-pane");
+    if (!pane) return;
+    const hasFiles = (e) =>
+      e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+    let depth = 0; // dragenter/leave fire per child element; count to avoid flicker
+
+    pane.addEventListener("dragenter", (e) => {
+      if (!state.currentTodoId || !hasFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      pane.classList.add("dropping");
+    });
+    pane.addEventListener("dragover", (e) => {
+      if (!state.currentTodoId || !hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    pane.addEventListener("dragleave", () => {
+      if (!depth) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) pane.classList.remove("dropping");
+    });
+    pane.addEventListener("drop", async (e) => {
+      depth = 0;
+      pane.classList.remove("dropping");
+      if (!state.currentTodoId || !hasFiles(e)) return;
+      e.preventDefault();
+      await App.uploadFilesToTodo(state.currentTodoId, e.dataTransfer.files);
+    });
+  }
+
+  function bindShellEvents() {
+    $("#logout").on("click", async () => {
+      try { await Sync.flush(); } catch (e) { /* push pending changes first */ }
+      try { await API.post("/api/auth/logout"); } catch (e) { /* ignore */ }
+      await clearLocalData();
+      location.reload();
+    });
+    $("#sync-now").on("click", () => Sync.flush().then(() => toast("Synced")));
+    $("#settings-btn").on("click", showSettings);
+    $("#settings-back").on("click", hideSettings);
+    $("#notif-btn").on("click", openNotifList);
+    $("#settings-terms-link").on("click", () => $("#terms-modal").modal("show"));
+    $("#notif-clear").on("click", async () => {
+      await markCommentsSeen();
+      await App.renderAll();
+      $("#notif-modal").modal("hide");
+      toast("Marked all as read");
+    });
+    $("#default-bucket").on("change", function () { DB.setMeta("default_bucket", this.value); });
+    $("#default-status").on("change", function () { DB.setMeta("default_status", this.value); });
+    $("#tz-select").on("change", async function () {
+      try {
+        const u = await API.patch("/api/auth/me", { timezone: this.value });
+        state.user.timezone = u.timezone;
+        toast("Timezone saved");
+      } catch (e) { toast(errText(e), "error"); }
+    });
+    $("#profile-name").on("change", async function () {
+      try {
+        const u = await API.patch("/api/auth/me", { name: this.value });
+        state.user.name = u.name;
+        toast("Name saved");
+      } catch (e) { toast(errText(e), "error"); }
+    });
+    $("#new-bucket-btn").on("click", () => App.openBucketModal());
+    $("#fab").on("click", () => $("#quick-add-input").focus());
+    $("#quick-add-help").on("click", () => $("#syntax-modal").modal("show"));
+
+    // Watching (tasks shared with me): a main-pane view, like the status filters.
+    $("#watching-btn").on("click", enterWatching);
+
+    // Automation (recurring tasks): a main-pane panel, like the Watching view.
+    $("#automation-btn").on("click", () => App.showAutomation());
+    $("#rec-frequency").on("change", function () { App.renderRecWhen(this.value, {}); });
+    $("#rec-form").on("submit", (e) => App.saveRec(e));
+    $("#rec-cancel").on("click", () => App.resetRecForm());
+
+    // API (external create endpoint): a main-pane panel, like the Watching view.
+    $("#api-btn").on("click", () => App.showApiPage());
+    $("#api-bucket, #api-status").on("change", () => App.updateApiCurl());
+    $("#api-rotate").on("click", () => App.rotateApiToken());
+    $("#api-copy-endpoint").on("click", () => App.copyText($("#api-endpoint").val(), "Endpoint copied"));
+    $("#api-copy-curl").on("click", () => App.copyText(App.apiCurl, "curl command copied"));
+
+    // "How you can use this with software" modal (per-tool reveals).
+    $("#api-software-accordion").accordion();
+    $("#api-software-btn").on("click", () => $("#api-software-modal").modal("show"));
+    $("#api-copy-shell").on("click", () => App.copyText(App.apiShell, "Alias copied"));
+    $("#api-copy-alfred").on("click", () => App.copyText(App.apiAlfred, "Script copied"));
+
+    // Permanent quick-add bar (submit with Enter, unless the autocomplete menu
+    // is open — then Enter/Tab/arrows drive the menu instead).
+    App.initQuickAddAutocomplete();
+    $("#quick-add-input").on("keydown", (e) => {
+      if (App.qaAutocompleteKeydown(e)) { e.preventDefault(); return; }
+      if (e.key === "Enter") App.quickAdd();
+    });
+    $("#quick-add-input").on("paste", (e) => App.quickAddPaste(e));
+
+    // Task search: toggle from either logo's search icon, live-filter on input.
+    $(".js-search-toggle").on("click", toggleSearch);
+    $("#search-close").on("click", closeSearch);
+    $("#search-help").on("click", () => $("#search-help-modal").modal("show"));
+    $("#search-input").on("input", onSearchInput);
+    $("#search-input").on("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeSearch(); } });
+    // "/" anywhere (outside a field) opens search, like many web apps.
+    $(document).on("keydown", (e) => {
+      if (e.key !== "/" || state.search.active) return;
+      if (/^(input|textarea|select)$/i.test(e.target.tagName) || e.target.isContentEditable) return;
+      if ($("#app").is(":visible")) { e.preventDefault(); openSearch(); }
+    });
+
+    // Status and bucket are independent filters that combine.
+    $("#views-menu").on("click", ".status-link", function () {
+      setStatusFilter(String($(this).data("status")));
+    });
+    $("#buckets-menu").on("click", ".bucket-link", function () {
+      setBucketFilter(String($(this).data("bucket")));
+    });
+
+    // Detail pane close (Esc, the mobile back bar, or selecting another task).
+    $(document).on("keydown", (e) => { if (e.key === "Escape" && state.currentTodoId) App.closeDetail(); });
+    $("#detail-mobile-close").on("click", () => App.closeDetail());
+
+    // Close the watchers/schedule popovers when clicking outside them.
+    $(document).on("click", (e) => {
+      if (!state.watchersOpen && !state.scheduleOpen) return;
+      if ($(e.target).closest("#d-watchers-panel, #d-schedule-panel, #d-watchers-btn, #d-schedule-btn").length) return;
+      App.closePopovers();
+    });
+
+    // Mobile rail toggle
+    $("#rail-toggle").on("click", () => $("body").toggleClass("rail-open"));
+    $("#rail-backdrop").on("click", () => $("body").removeClass("rail-open"));
+  }
+
+  let renderScheduled = false;
+  function onDataChanged() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    setTimeout(async () => {
+      renderScheduled = false;
+      await App.renderAll();
+      updatePendingBadge();
+      // Don't refresh from the local mirror when a read-only watched task is open
+      // (it isn't in local data and would close the pane).
+      if (state.currentTodoId && !state.currentWatchToken) await App.refreshOpenTodo();
+    }, 50);
+  }
+
+  async function updatePendingBadge() {
+    const n = await Sync.pendingCount();
+    $("#pending-badge").text(n).toggle(n > 0);
+  }
+
+  function setStatusFilter(value) {
+    if (state.search.active) exitSearch(); // picking a filter leaves search mode
+    exitMainPanel(); // picking a filter leaves the Automation/API panel
+    state.watching = false; // picking a normal filter leaves the Watching view
+    state.statusFilter = value;
+    $("#views-menu .status-link").removeClass("active");
+    $(`#views-menu .status-link[data-status="${value}"]`).addClass("active");
+    $("body").removeClass("rail-open");
+    App.renderAll();
+  }
+
+  function setBucketFilter(value) {
+    if (state.search.active) exitSearch(); // picking a filter leaves search mode
+    exitMainPanel(); // picking a filter leaves the Automation/API panel
+    state.watching = false; // picking a normal filter leaves the Watching view
+    state.bucketFilter = value;
+    $("body").removeClass("rail-open");
+    App.renderAll();
+  }
+
+  // The "Watching" sidebar view: tasks shared with me, shown in the main pane.
+  function enterWatching() {
+    if (state.search.active) exitSearch();
+    exitMainPanel(); // leaves the Automation/API panel
+    state.watching = true;
+    App.closeDetail();
+    $("body").removeClass("rail-open");
+    App.renderAll();
+  }
+
+  // ===================== Main-pane panels (Automation / API) =====================
+  // Automation and API live in the main content area, swapping in for the task
+  // list (like the Watching view) rather than opening a separate full page.
+
+  // Show one of the main-pane panels, hiding the task-list chrome.
+  function enterMainPanel(name) {
+    if (state.search.active) exitSearch();
+    state.watching = false;
+    state.panel = name;
+    App.closeDetail();
+    $("#quick-add, #search-bar, #todo-list, #empty-state").hide();
+    $("#automation-panel").toggle(name === "automation");
+    $("#api-panel").toggle(name === "api");
+    // The panel buttons own the "active" highlight while a panel is open.
+    $("#views-menu .status-link, #watching-btn").removeClass("active");
+    $("#automation-btn").toggleClass("active", name === "automation");
+    $("#api-btn").toggleClass("active", name === "api");
+    $("body").removeClass("rail-open");
+  }
+
+  // Leave any open panel and restore the normal task list (callers re-render).
+  function exitMainPanel() {
+    if (!state.panel) return;
+    state.panel = null;
+    $("#automation-panel, #api-panel").hide();
+    $("#quick-add, #todo-list").show();
+    $("#automation-btn, #api-btn").removeClass("active");
+  }
+
+  // ===================== Search =====================
+
+  function openSearch() {
+    if (state.panel) { exitMainPanel(); App.renderAll(); }
+    state.search.active = true;
+    state.search.parsed = parseSearch($("#search-input").val());
+    // search-mode dims the sidebar filter highlights (they don't apply while
+    // searching) and 'active' lights up the trigger icon + its pointer triangle.
+    $("body").addClass("search-mode").removeClass("rail-open");
+    $(".js-search-toggle").addClass("active");
+    $("#search-bar").show();
+    $("#quick-add").hide();
+    $("#search-input").trigger("focus");
+    App.renderAll();
+  }
+
+  // Tear down the search UI without re-rendering (callers render themselves).
+  function exitSearch() {
+    state.search.active = false;
+    $("body").removeClass("search-mode");
+    $(".js-search-toggle").removeClass("active");
+    $("#search-input").val("");
+    $(".search-input").removeClass("error");
+    $("#search-bar").hide();
+    $("#quick-add").show();
+  }
+
+  function closeSearch() {
+    if (!state.search.active) return;
+    exitSearch();
+    App.renderAll();
+  }
+
+  function toggleSearch() {
+    state.search.active ? closeSearch() : openSearch();
+  }
+
+  let searchDebounce = null;
+  function onSearchInput() {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(async () => {
+      state.search.parsed = parseSearch($("#search-input").val());
+      $(".search-input").toggleClass("error", state.search.parsed.regexError);
+      await App.renderList(await liveBuckets());
+    }, 120);
+  }
+
+  // ===================== Settings =====================
+
+  async function renderNewTaskDefaults() {
+    const buckets = (await liveBuckets()).filter((b) => !b.archived);
+    const curBucket = await getDefaultBucket();
+    const curStatus = await getDefaultStatus();
+    $("#default-bucket").html(
+      buckets
+        .map((b) => `<option value="${b.id}" ${b.id === curBucket ? "selected" : ""}>${esc(b.name)}</option>`)
+        .join("")
+    );
+    $("#default-status").html(
+      STATUS.map((s) => `<option value="${s.value}" ${s.value === curStatus ? "selected" : ""}>${labelOf(s.value)}</option>`).join("")
+    );
+  }
+
+  function promptForName() {
+    $("#name-modal-input").val("");
+    $("#name-modal")
+      .modal({
+        onShow: () => localStorage.setItem("name_prompted", "1"),
+        onApprove: async () => {
+          const name = $("#name-modal-input").val().trim();
+          if (!name) return;
+          try {
+            const u = await API.patch("/api/auth/me", { name });
+            state.user.name = u.name;
+            toast(`Thanks, ${u.name}!`);
+          } catch (e) { toast(errText(e), "error"); }
+        },
+      })
+      .modal("show");
+  }
+
+  function renderTimezone() {
+    let zones = [];
+    try { zones = Intl.supportedValuesOf("timeZone"); } catch (e) { /* older browsers */ }
+    const current = (state.user && state.user.timezone) || "UTC";
+    if (!zones.length) zones = ["UTC", current];
+    if (!zones.includes(current)) zones.unshift(current);
+    $("#tz-select").html(
+      zones.map((z) => `<option value="${esc(z)}" ${z === current ? "selected" : ""}>${esc(z)}</option>`).join("")
+    );
+  }
+
+  function showSettings() {
+    $("#settings-email").text(state.user.email);
+    $("#profile-name").val(state.user.name || "");
+    renderViewOrderEditor();
+    renderNewTaskDefaults();
+    renderTimezone();
+    $("#app").hide();
+    $("#settings").show();
+  }
+
+  async function hideSettings() {
+    $("#settings").hide();
+    $("#app").css("display", "flex");
+    await App.renderViews(); // ensure the sidebar reflects any new order
+  }
+
+  async function renderViewOrderEditor() {
+    const order = await getViewOrder();
+    $("#status-order-list").html(
+      order
+        .map((v) => {
+          const m = viewMeta(v);
+          return `
+          <div class="item" data-value="${v}">
+            <div class="right floated content">
+              <button class="ui icon mini button so-up" title="Move up"><i class="arrow up icon"></i></button>
+              <button class="ui icon mini button so-down" title="Move down"><i class="arrow down icon"></i></button>
+            </div>
+            <i class="${m.color} ${m.icon} icon" style="line-height:1.8"></i>
+            <div class="content">
+              <input type="text" class="view-label-input" data-value="${v}" value="${esc(m.label)}"
+                     placeholder="${esc(defaultLabel(v))}" title="Rename this view" />
+            </div>
+          </div>`;
+        })
+        .join("")
+    );
+    $("#status-order-list .so-up").on("click", function () {
+      moveView($(this).closest(".item").data("value"), -1);
+    });
+    $("#status-order-list .so-down").on("click", function () {
+      moveView($(this).closest(".item").data("value"), 1);
+    });
+    $("#status-order-list .view-label-input").on("change", function () {
+      saveLabel($(this).data("value"), this.value);
+    });
+  }
+
+  async function moveView(value, dir) {
+    const order = await getViewOrder();
+    const i = order.indexOf(String(value));
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    await DB.setMeta("view_order", order);
+    await renderViewOrderEditor();
+    await App.renderViews();
+  }
+
+  // ===================== New-account defaults =====================
+
+  // A new account starts with two default buckets (once — not recreated if the
+  // user later deletes them).
+  async function ensureDefaultBuckets() {
+    if (await DB.getMeta("buckets_initialized", false)) return;
+    if ((await liveBuckets()).length === 0) {
+      await Sync.mutate("bucket", "create", null, { name: "Work", position: Date.now() });
+      await Sync.mutate("bucket", "create", null, { name: "Private", position: Date.now() + 1 });
+    }
+    await DB.setMeta("buckets_initialized", true);
+  }
+
+  // New-task defaults (configurable in Settings), with sensible fallbacks.
+  async function getDefaultStatus() {
+    const saved = await DB.getMeta("default_status", null);
+    return STATUS.some((s) => s.value === saved) ? saved : "open";
+  }
+  async function getDefaultBucket() {
+    const saved = await DB.getMeta("default_bucket", null);
+    const buckets = await liveBuckets();
+    if (saved && buckets.some((b) => b.id === saved && !b.archived)) return saved;
+    return (buckets.find((b) => !b.archived) || buckets[0] || {}).id || null;
+  }
+
+  // Wipe the local mirror + per-account state (on logout / account switch).
+  async function clearLocalData() {
+    await DB.clear("buckets");
+    await DB.clear("todos");
+    await DB.clear("events");
+    await DB.clear("queue");
+    await DB.clear("meta");
+    try {
+      localStorage.removeItem("name_prompted");
+      localStorage.removeItem("detail_width");
+    } catch (e) { /* ignore */ }
+    await loadLabels(); // reset in-memory labels to the now-empty store
+  }
+
+  Object.assign(App, {
+    boot,
+    applyDetailWidth,
+    enterMainPanel,
+    exitMainPanel,
+    enterWatching,
+    getDefaultStatus,
+    getDefaultBucket,
+    updatePendingBadge,
+    clearLocalData,
+  });
+})();

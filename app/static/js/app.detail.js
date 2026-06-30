@@ -1,0 +1,541 @@
+/* Task detail pane: open/close, the rendered detail view, its event wiring
+ * (status/bucket/title/description/subtasks/watchers/schedules/comments), the
+ * activity-feed entry renderer, subtask cascades, and file uploads (with progress). */
+(function () {
+  "use strict";
+
+  const App = window.App;
+  const {
+    $, esc, state, toast, errText, STATUS, statusOf,
+    liveBuckets, liveTodos, asUtc, labelOf, displayActor, fmtDate, EVENT_ICON,
+    isValidEmail, initEmailSearch, markCommentsSeen, updateBellBadge,
+  } = App;
+
+  async function openTodo(id) {
+    state.currentTodoId = id;
+    $("body").addClass("detail-open");
+    App.applyDetailWidth();
+    await refreshOpenTodo();
+    // Opening a task marks its comments as read (clears the bell).
+    await markCommentsSeen(id);
+    $(`#todo-list .todo-card[data-id="${id}"] .card-bell`).remove();
+    updateBellBadge();
+    // Highlight the open task in the list.
+    $("#todo-list .todo-card").removeClass("selected");
+    $(`#todo-list .todo-card[data-id="${id}"]`).addClass("selected");
+  }
+
+  function closeDetail() {
+    state.currentTodoId = null;
+    state.currentWatchToken = null;
+    $("body").removeClass("detail-open");
+    $("#todo-list .todo-card").removeClass("selected");
+  }
+
+  function closePopovers() {
+    state.watchersOpen = false;
+    state.scheduleOpen = false;
+    $("#d-watchers-panel, #d-schedule-panel").hide();
+  }
+
+  async function refreshOpenTodo() {
+    const id = state.currentTodoId;
+    const todo = await DB.get("todos", id);
+    if (!todo || todo.deleted) {
+      closeDetail();
+      return;
+    }
+    const buckets = await liveBuckets();
+    const all = await liveTodos();
+    const subtodos = all.filter((t) => t.parent_id === id);
+    const events = (await DB.getAll("events"))
+      .filter((e) => e.todo_id === id && !e.deleted)
+      .sort((a, b) => new Date(asUtc(a.created_at)) - new Date(asUtc(b.created_at)));
+
+    $("#detail-body").html(detailHtml(todo, buckets, subtodos, events));
+    initDetail(todo, buckets);
+  }
+
+  function detailHtml(todo, buckets, subtodos, events) {
+    const s = statusOf(todo.status);
+    const shareReady = !!todo.public_token;
+    const att = todo.attachments || [];
+    const watchers = todo.watchers || [];
+
+    const bName = (buckets.find((b) => b.id === todo.bucket_id) || {}).name || "Bucket";
+    const online = navigator.onLine;
+
+    return `
+      <div class="detail-top">
+        <div class="detail-controls">
+          <div class="ui ${s.color} floating dropdown icon button" id="d-status-btn" title="Status: ${labelOf(todo.status)}">
+            <i class="${s.icon} icon"></i>
+            <div class="menu">
+              ${STATUS.map((o) => {
+                const sel = o.value === todo.status;
+                return `<div class="item ${sel ? "active selected" : ""}" data-value="${o.value}">
+                  <i class="arrow right icon" style="visibility:${sel ? "visible" : "hidden"}"></i>
+                  <i class="${o.icon} icon"></i> ${labelOf(o.value)}</div>`;
+              }).join("")}
+            </div>
+          </div>
+          ${todo.parent_id
+            ? `<button class="ui disabled icon button" title="Bucket: ${esc(bName)} (inherited from parent task)"><i class="folder icon"></i></button>`
+            : `<div class="ui floating dropdown icon button" id="d-bucket-btn" title="Bucket: ${esc(bName)}">
+                <i class="folder icon"></i>
+                <div class="menu">
+                  ${buckets.map((b) => {
+                    const sel = b.id === todo.bucket_id;
+                    return `<div class="item ${sel ? "active selected" : ""}" data-value="${b.id}">
+                      <i class="arrow right icon" style="visibility:${sel ? "visible" : "hidden"}"></i>${esc(b.name)}</div>`;
+                  }).join("")}
+                </div>
+              </div>`}
+          <button class="ui ${watchers.length ? "green " : ""}icon button" id="d-watchers-btn"
+                  title="Watchers${watchers.length ? ` (${watchers.length})` : ""}">
+            <i class="eye icon"></i>
+          </button>
+          <button class="ui icon button" id="d-file-btn" title="Attach a file" ${online ? "" : "disabled"}>
+            <i class="upload icon"></i>
+          </button>
+          <button class="ui icon button" id="d-schedule-btn" title="Schedule a status change" ${online ? "" : "disabled"}>
+            <i class="calendar alternate outline icon"></i>
+          </button>
+          <button class="ui basic ${shareReady ? "blue" : "disabled"} icon button" id="d-share" title="Copy share link">
+            <i class="share alternate icon"></i>
+          </button>
+          <button class="ui basic red icon button" id="d-delete" title="Delete task"><i class="trash icon"></i></button>
+
+          <div id="d-watchers-panel" class="detail-popover" style="display:${state.watchersOpen ? "block" : "none"}">
+            <div class="detail-popover-title"><i class="eye icon"></i> Watchers</div>
+            <div id="d-watchers">
+              ${watchers.map((w) => `<span class="ui label">${esc(w.email)}<i class="delete icon d-rm-watcher" data-id="${w.id}"></i></span>`).join("") || "<span style='color:#aaa'>No watchers yet.</span>"}
+            </div>
+            <div class="ui fluid search email-search" style="margin-top:.6rem">
+              <div class="ui fluid input">
+                <input class="prompt" type="email" id="d-watcher-email" autocomplete="off" placeholder="Add watcher email…" ${online ? "" : "disabled"} />
+              </div>
+              <div class="results"></div>
+            </div>
+            <button class="ui primary button" id="d-add-watcher" style="display:none;margin-top:.5rem">
+              <i class="paper plane icon"></i> Invite
+            </button>
+            ${online ? "" : "<div style='color:#999;font-size:.85em;margin-top:.4rem'>Connect to invite watchers.</div>"}
+          </div>
+
+          <div id="d-schedule-panel" class="detail-popover" style="display:${state.scheduleOpen ? "block" : "none"}">
+            <div class="detail-popover-title"><i class="calendar alternate outline icon"></i> Schedule a status change</div>
+            <div id="d-schedules"><div style="color:#aaa">Loading…</div></div>
+            <div class="ui form" style="margin-top:.6rem">
+              <div class="field">
+                <label>On date</label>
+                <input type="date" id="d-schedule-date" ${online ? "" : "disabled"} />
+              </div>
+              <div class="field">
+                <label>Set status to</label>
+                <select id="d-schedule-status" ${online ? "" : "disabled"}>
+                  ${STATUS.map((o) => `<option value="${o.value}" ${o.value === "on_list" ? "selected" : ""}>${labelOf(o.value)}</option>`).join("")}
+                </select>
+              </div>
+              <button class="ui primary fluid button" id="d-schedule-add" ${online ? "" : "disabled"}>
+                <i class="calendar plus outline icon"></i> Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+        <input type="text" id="d-title" class="detail-title-input" value="${esc(todo.title)}" />
+      </div>
+      <input type="file" id="d-file" multiple style="display:none" ${online ? "" : "disabled"} />
+
+      <h4 class="ui horizontal divider header"><i class="align left icon"></i> Description</h4>
+      <div class="ui form">
+        <textarea id="d-text" rows="4" placeholder="Markdown supported…">${esc(todo.text || "")}</textarea>
+      </div>
+
+      <h4 class="ui horizontal divider header"><i class="sitemap icon"></i> Subtasks</h4>
+      <div id="d-subtodos">
+        ${subtodos
+          .map(
+            (st) => `
+          <div class="subtodo-item" data-id="${st.id}">
+            <div class="ui checkbox">
+              <input type="checkbox" ${st.status === "done" ? "checked" : ""} class="d-sub-check" data-id="${st.id}" />
+              <label style="${st.status === "done" ? "text-decoration:line-through" : ""}">${esc(st.title)}
+                <a class="d-sub-open" data-id="${st.id}" style="font-size:.8em">(open)</a></label>
+            </div>
+          </div>`
+          )
+          .join("") || "<div style='color:#aaa'>No subtasks.</div>"}
+        <div class="ui action input fluid" style="margin-top:.6rem">
+          <input type="text" id="d-sub-title" placeholder="Add a subtask…" />
+          <button class="ui button" id="d-add-sub">Add</button>
+        </div>
+      </div>
+
+      ${att.length ? `
+      <h4 class="ui horizontal divider header"><i class="paperclip icon"></i> Files</h4>
+      <div id="d-attachments">
+        ${att.map((a) => `<span class="ui label">
+          <a href="/api/attachments/${a.id}" target="_blank"><i class="file icon"></i>${esc(a.filename)}</a>
+          <i class="delete icon d-rm-file" data-id="${a.id}" title="Remove file"></i>
+        </span>`).join("")}
+      </div>` : ""}
+
+      <h4 class="ui horizontal divider header"><i class="comments icon"></i> Activity</h4>
+      <div class="ui feed" id="d-timeline">
+        ${events.map((e) => eventHtml(e)).join("") || "<div style='color:#aaa'>No activity yet.</div>"}
+      </div>
+      <div class="ui form" style="margin-top:1rem">
+        <div class="field">
+          <textarea id="d-comment" rows="2" placeholder="Add a comment (markdown)…"></textarea>
+        </div>
+        <input type="file" id="d-comment-file" style="display:none" />
+        <button class="ui icon button" id="d-comment-file-btn" title="Attach a file"><i class="upload icon"></i></button>
+        <button class="ui primary button" id="d-add-comment">Comment</button>
+        <span id="d-comment-file-name" style="color:#888;font-size:.85em;margin-left:.4rem"></span>
+      </div>
+    `;
+  }
+
+  function attachmentChip(a) {
+    return `<a class="ui label" href="/api/attachments/${a.id}" target="_blank">
+      <i class="file icon"></i>${esc(a.filename)}</a>`;
+  }
+
+  // A single entry rendered in Fomantic's "feed" view, with a date.
+  function eventHtml(e) {
+    const isComment = e.type === "comment";
+    const who = displayActor(e.actor_email);
+    const body = isComment ? MD.render(e.body) : esc(e.body);
+    const att = (e.attachments || []).map(attachmentChip).join(" ");
+    const icon = EVENT_ICON[e.type] || "circle";
+    return `
+      <div class="event">
+        <div class="label"><i class="${icon} icon"></i></div>
+        <div class="content">
+          <div class="summary">
+            <span class="user">${esc(who)}</span>
+            <div class="date">${fmtDate(e.created_at)}</div>
+          </div>
+          <div class="extra text markdown">${body}</div>
+          ${att ? `<div class="meta">${att}</div>` : ""}
+        </div>
+      </div>`;
+  }
+
+  // Apply the same change to every descendant subtask (depth-first), skipping any
+  // that already match so we don't queue redundant mutations or log no-op events.
+  async function cascadeToSubtasks(rootId, changes) {
+    const all = await liveTodos();
+    const childrenOf = (pid) => all.filter((t) => t.parent_id === pid);
+    const queue = [...childrenOf(rootId)];
+    while (queue.length) {
+      const t = queue.shift();
+      if (Object.keys(changes).some((k) => t[k] !== changes[k])) {
+        await Sync.mutate("todo", "update", t.id, changes);
+      }
+      queue.push(...childrenOf(t.id));
+    }
+  }
+
+  function initDetail(todo, buckets) {
+    const id = todo.id;
+
+    // Status & bucket are button-menus; onChange only fires on user selection
+    // (we render the current value statically, so no spurious initial mutation).
+    // Both changes cascade to every subtask: status keeps a tree in sync, and a
+    // bucket move takes the whole subtree along (subtasks live in the parent's bucket).
+    $("#d-status-btn").dropdown({
+      action: "hide",
+      onChange: async (value) => {
+        if (!value || value === todo.status) return;
+        await Sync.mutate("todo", "update", id, { status: value });
+        await cascadeToSubtasks(id, { status: value });
+      },
+    });
+    $("#d-bucket-btn").dropdown({
+      action: "hide",
+      onChange: async (value) => {
+        if (!value || value === todo.bucket_id) return;
+        await Sync.mutate("todo", "update", id, { bucket_id: value });
+        await cascadeToSubtasks(id, { bucket_id: value });
+      },
+    });
+
+    // Watchers panel toggle (state persists across re-renders).
+    $("#d-watchers-btn").on("click", () => {
+      const open = !state.watchersOpen;
+      closePopovers();
+      state.watchersOpen = open;
+      $("#d-watchers-panel").toggle(open);
+    });
+
+    // Schedule a future status change.
+    $("#d-schedule-btn").on("click", () => {
+      const open = !state.scheduleOpen;
+      closePopovers();
+      state.scheduleOpen = open;
+      $("#d-schedule-panel").toggle(open);
+      if (open) loadSchedules(id);
+    });
+    if (state.scheduleOpen) loadSchedules(id);
+    $("#d-schedule-add").on("click", async () => {
+      const date = $("#d-schedule-date").val();
+      const status = $("#d-schedule-status").val();
+      if (!date) return toast("Pick a date", "warning");
+      try {
+        await API.post(`/api/todos/${id}/schedules`, { date, status });
+        $("#d-schedule-date").val("");
+        await loadSchedules(id);
+        await Sync.pull(); // surface the new "scheduled" timeline event
+        toast("Status change scheduled");
+      } catch (e) { toast(errText(e), "error"); }
+    });
+
+    // Title (save on change if different)
+    $("#d-title").on("change", async function () {
+      const v = $(this).val().trim();
+      if (v && v !== todo.title) await Sync.mutate("todo", "update", id, { title: v });
+    });
+
+    // Auto-save the description when focus leaves the textarea, if it changed.
+    $("#d-text").on("blur", async function () {
+      const v = $(this).val();
+      if (v !== (todo.text || "")) {
+        await Sync.mutate("todo", "update", id, { text: v });
+        toast("Description saved");
+      }
+    });
+
+    $("#d-delete").on("click", async () => {
+      await Sync.mutate("todo", "delete", id, {});
+      closeDetail();
+      toast("Task deleted");
+    });
+
+    $("#d-share").on("click", () => {
+      if (!todo.public_token) return toast("Sync first to get a share link", "warning");
+      const url = `${location.origin}/t/${todo.public_token}`;
+      navigator.clipboard?.writeText(url).then(
+        () => toast("Share link copied"),
+        () => prompt("Copy this share link:", url)
+      );
+    });
+
+    // Subtasks
+    $("#d-add-sub").on("click", addSub);
+    $("#d-sub-title").on("keydown", (e) => { if (e.key === "Enter") addSub(); });
+    async function addSub() {
+      const title = $("#d-sub-title").val().trim();
+      if (!title) return;
+      await Sync.mutate("todo", "create", null, {
+        title, bucket_id: todo.bucket_id, parent_id: id, status: "open", position: Date.now(),
+      });
+      $("#d-sub-title").val("");
+    }
+    $(".d-sub-check").on("change", async function () {
+      const sid = $(this).data("id");
+      await Sync.mutate("todo", "update", sid, { status: this.checked ? "done" : "open" });
+    });
+    $(".d-sub-open").on("click", function () { openTodo($(this).data("id")); });
+
+    // Watchers (online-only: triggers an email). The Invite button only appears
+    // once the input holds a valid email address.
+    const watcherInput = $("#d-watcher-email");
+    const inviteBtn = $("#d-add-watcher");
+    const updateInvite = () => inviteBtn.toggle(isValidEmail(watcherInput.val().trim()));
+    watcherInput.on("input", updateInvite);
+    initEmailSearch("#d-watcher-email", updateInvite);
+
+    const addWatcher = async () => {
+      const email = watcherInput.val().trim();
+      if (!isValidEmail(email)) return;
+      try {
+        await API.post(`/api/todos/${id}/watchers`, { email });
+        watcherInput.val("");
+        updateInvite();
+        await Sync.pull();
+        toast("Watcher invited");
+      } catch (e) { toast(errText(e), "error"); }
+    };
+    inviteBtn.on("click", addWatcher);
+    watcherInput.on("keydown", (e) => { if (e.key === "Enter") addWatcher(); });
+
+    $(".d-rm-watcher").on("click", async function () {
+      try {
+        await API.del(`/api/todos/${id}/watchers/${$(this).data("id")}`);
+        await Sync.pull();
+      } catch (e) {
+        if (e && e.status === 404) {
+          // Local cache is out of date (e.g. the server was reset). Rebuild from server.
+          await Sync.fullResync();
+          toast("Your data was out of date — refreshed from the server");
+        } else {
+          toast(errText(e), "error");
+        }
+      }
+    });
+
+    // Todo file upload (online-only): icon button opens the hidden file picker.
+    // Files can also be dropped onto the detail pane (see setupDetailDropzone).
+    $("#d-file-btn").on("click", () => $("#d-file").trigger("click"));
+    $("#d-file").on("change", async function () {
+      await uploadFilesToTodo(id, this.files);
+      this.value = ""; // allow re-picking the same file
+    });
+    $(".d-rm-file").on("click", async function () {
+      try {
+        await API.del(`/api/attachments/${$(this).data("id")}`);
+        await Sync.pull();
+        toast("File removed");
+      } catch (e) { toast(errText(e), "error"); }
+    });
+
+    // Comment file picker: same icon-button pattern as the Files section.
+    $("#d-comment-file-btn").on("click", () => $("#d-comment-file").trigger("click"));
+    $("#d-comment-file").on("change", function () {
+      $("#d-comment-file-name").text(this.files[0] ? this.files[0].name : "");
+    });
+
+    // Comment (+ optional file)
+    $("#d-add-comment").on("click", async () => {
+      const body = $("#d-comment").val().trim();
+      if (!body) return;
+      const commentId = Sync.uuid();
+      // Include actor_email locally so my own comment isn't flagged as "unread".
+      await Sync.mutate("comment", "create", commentId, { todo_id: id, body, actor_email: state.user.email });
+      $("#d-comment").val("");
+      const file = $("#d-comment-file")[0].files[0];
+      if (file && navigator.onLine) {
+        try {
+          await Sync.flush(); // ensure the event exists server-side first
+          await uploadFile("event", commentId, file);
+          await Sync.pull();
+        } catch (e) { toast("Comment saved; file upload failed (offline?)", "warning"); }
+      } else if (file) {
+        toast("Comment saved; attach files when back online", "warning");
+      }
+      $("#d-comment-file").val("");
+      $("#d-comment-file-name").text("");
+    });
+  }
+
+  async function uploadFile(ownerType, ownerId, file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    return API.upload(`/api/attachments?owner_type=${ownerType}&owner_id=${ownerId}`, fd);
+  }
+
+  // Upload via XHR (not fetch) so we get byte-level progress for large files.
+  // Throws {status, detail} to match the API wrapper's error shape.
+  function uploadFileWithProgress(ownerType, ownerId, file, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/attachments?owner_type=${ownerType}&owner_id=${ownerId}`);
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => {
+        if (onProgress) onProgress(e.lengthComputable ? e.loaded / e.total : null);
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          let data = null;
+          try { data = JSON.parse(xhr.responseText); } catch (_) { /* no body */ }
+          resolve(data);
+        } else {
+          let detail = xhr.statusText;
+          try { detail = JSON.parse(xhr.responseText).detail || detail; } catch (_) { /* ignore */ }
+          reject({ status: xhr.status, detail });
+        }
+      };
+      xhr.onerror = () => reject({ status: 0, detail: "Network error during upload" });
+      const fd = new FormData();
+      fd.append("file", file);
+      xhr.send(fd);
+    });
+  }
+
+  // Update the upload overlay. frac is 0..1, or null for an indeterminate state.
+  function setUploadProgress(label, frac) {
+    $("#du-label").text(label);
+    const fill = $("#du-bar-fill");
+    if (frac == null) {
+      $("#du-pct").text("");
+      fill.addClass("indeterminate").css("width", "100%");
+    } else {
+      const pct = Math.round(frac * 100);
+      $("#du-pct").text(pct + "%");
+      fill.removeClass("indeterminate").css("width", pct + "%");
+    }
+  }
+
+  // Attach one or more files to a todo (used by the picker and drag-and-drop),
+  // showing a progress overlay on the detail pane. Online-only.
+  async function uploadFilesToTodo(todoId, files) {
+    files = Array.from(files || []);
+    if (!files.length) return;
+    if (!navigator.onLine) return toast("Connect to upload files", "warning");
+
+    const pane = document.getElementById("detail-pane");
+    pane.classList.add("uploading");
+    let ok = 0;
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const tag = files.length > 1 ? ` (${i + 1}/${files.length})` : "";
+        setUploadProgress(`Uploading ${f.name}${tag}`, 0);
+        try {
+          await uploadFileWithProgress("todo", todoId, f, (frac) =>
+            setUploadProgress(`Uploading ${f.name}${tag}`, frac)
+          );
+          // Bytes are sent; the server is still saving. Show a finishing state.
+          setUploadProgress(`Finishing ${f.name}${tag}`, null);
+          ok++;
+        } catch (e) {
+          toast(`Couldn't upload ${f.name}: ${errText(e)}`, "error");
+        }
+      }
+    } finally {
+      pane.classList.remove("uploading");
+    }
+    if (ok) {
+      // A watched task isn't part of local sync, so re-fetch its read-only view to
+      // show the new file; owned tasks refresh via the normal pull + re-render.
+      if (state.currentWatchToken) {
+        await App.openWatchedDetail(state.currentWatchToken, state.currentTodoId);
+      } else {
+        await Sync.pull();
+      }
+      toast(ok === 1 ? "File attached" : `${ok} files attached`);
+    }
+  }
+
+  // List pending scheduled status changes for a todo, with a cancel control each.
+  async function loadSchedules(id) {
+    const el = $("#d-schedules");
+    if (!el.length) return;
+    try {
+      const list = await API.get(`/api/todos/${id}/schedules`);
+      el.html(
+        list.length
+          ? list
+              .map((s) => `<div class="ui label" style="margin:0 .3rem .3rem 0">
+                <i class="calendar alternate outline icon"></i> ${esc(s.local_date)} → ${labelOf(s.target_status)}
+                <i class="delete icon d-rm-schedule" data-id="${s.id}" title="Cancel"></i></div>`)
+              .join("")
+          : "<div style='color:#aaa'>No scheduled changes.</div>"
+      );
+      $("#d-schedules .d-rm-schedule").on("click", async function () {
+        try {
+          await API.del(`/api/todos/${id}/schedules/${$(this).data("id")}`);
+          await loadSchedules(id);
+        } catch (e) { toast(errText(e), "error"); }
+      });
+    } catch (e) {
+      el.html("<div style='color:#db2828'>Couldn't load schedules.</div>");
+    }
+  }
+
+  Object.assign(App, {
+    openTodo, closeDetail, closePopovers, refreshOpenTodo, eventHtml, uploadFilesToTodo,
+  });
+})();

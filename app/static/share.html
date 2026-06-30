@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Shared task · meerato</title>
+  <meta name="theme-color" content="#2185d0" />
+  <link rel="icon" href="/static/logo-192.png" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body style="background:#f4f5f7">
+  <div class="ui container" style="max-width:760px !important; padding:2rem 1rem 4rem">
+    <div class="ui blue inverted menu" style="border-radius:0 0 6px 6px">
+      <div class="header item"><img src="/static/logo-192.png" alt="" style="height:2em;margin-right:.4rem">meerato · Shared</div>
+    </div>
+
+    <div id="loading" class="ui active inverted dimmer"><div class="ui text loader">Loading…</div></div>
+    <div id="error" class="ui icon negative message" style="display:none">
+      <i class="ban icon"></i>
+      <div class="content"><div class="header">Not available</div><p id="error-text"></p></div>
+    </div>
+    <div id="view" style="display:none"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="/static/js/markdown.js"></script>
+  <script>
+    const STATUS = {
+      open: { label: "Backlog", color: "grey", icon: "inbox" },
+      on_list: { label: "Now", color: "blue", icon: "list" },
+      blocked: { label: "Blocked", color: "red", icon: "ban" },
+      done: { label: "Done", color: "green", icon: "check" },
+    };
+    const esc = (s) => (s || "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const asUtc = (iso) => iso && !/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso + "Z" : iso;
+    const fmt = (iso) => iso ? new Date(asUtc(iso)).toLocaleString(undefined,
+      { dateStyle: "medium", timeStyle: "short" }) : "";
+    const token = location.pathname.split("/t/")[1];
+    const EVENT_ICON = {
+      created: "plus", comment: "comment outline", status_changed: "exchange",
+      edited: "pencil", moved: "arrows alternate", watcher_added: "eye", file_added: "paperclip",
+    };
+    function displayActor(email) {
+      if (!email) return "system";
+      if (/\(guest\)\s*$/.test(email)) return email.replace(/\s*\(guest\)\s*$/, "");
+      const at = email.indexOf("@");
+      return at > 0 ? email.slice(0, at) : email;
+    }
+    function feedEvent(e) {
+      const isComment = e.type === "comment";
+      const att = (e.attachments || []).map(chip).join(" ");
+      return `<div class="event">
+        <div class="label"><i class="${EVENT_ICON[e.type] || 'circle'} icon"></i></div>
+        <div class="content">
+          <div class="summary"><span class="user">${esc(displayActor(e.actor_email))}</span>
+            <div class="date">${fmt(e.created_at)}</div></div>
+          <div class="extra text markdown">${isComment ? MD.render(e.body) : esc(e.body)}</div>
+          ${att ? `<div class="meta">${att}</div>` : ""}
+        </div></div>`;
+    }
+
+    function chip(a) {
+      return `<a class="ui label" target="_blank"
+        href="/api/attachments/${a.id}?token=${encodeURIComponent(token)}">
+        <i class="file icon"></i>${esc(a.filename)}</a>`;
+    }
+    function statusLabel(v) {
+      const s = STATUS[v] || STATUS.open;
+      return `<span class="ui ${s.color} label"><i class="${s.icon} icon"></i>${s.label}</span>`;
+    }
+
+    let me = null; // the signed-in user, if any (drives the call-to-action)
+
+    async function load() {
+      try {
+        const [resp, meResp] = await Promise.all([
+          fetch(`/api/public/${encodeURIComponent(token)}`),
+          fetch("/api/auth/me", { credentials: "same-origin" }).catch(() => null),
+        ]);
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || "Not found");
+        me = meResp && meResp.ok ? await meResp.json() : null;
+        render(await resp.json());
+      } catch (e) {
+        document.getElementById("loading").style.display = "none";
+        document.getElementById("error").style.display = "block";
+        document.getElementById("error-text").textContent = e.message;
+      }
+    }
+
+    // Call-to-action shown with the task: migrate the viewer into the app.
+    function ctaHtml() {
+      if (me) {
+        return `
+        <div class="ui blue segment">
+          <p>You are logged in as <strong>${esc(me.email)}</strong>, so you can also
+             manage this task in your dashboard.</p>
+          <a class="ui primary button" href="/?watch=${encodeURIComponent(token)}"><i class="external icon"></i> Go to task in dashboard</a>
+        </div>`;
+      }
+      return `
+        <div class="ui blue segment">
+          <h3 class="ui header"><i class="rocket icon"></i> View this task in the app</h3>
+          <p>meerato is a shared to-do app that organizes tasks around the parts of
+             your life. Enter your email and we'll send you a link to open this task,
+             keep it under <strong>Watching</strong>, and stay in the loop.
+             No password, no spam.</p>
+          <form class="ui form" id="cta-form">
+            <div class="ui action input" style="max-width:430px;width:100%">
+              <input type="email" id="cta-email" placeholder="you@example.com" required />
+              <button class="ui primary button" type="submit">View in the app</button>
+            </div>
+            <div id="cta-status" style="margin-top:.5rem;color:#888"></div>
+          </form>
+        </div>`;
+    }
+
+    function wireCta() {
+      // Signed-in viewers just get a link to their dashboard; only the
+      // signed-out email form needs wiring.
+      if (!me) {
+        document.getElementById("cta-form").addEventListener("submit", requestAccess);
+      }
+    }
+
+    async function requestAccess(ev) {
+      ev.preventDefault();
+      const email = document.getElementById("cta-email").value.trim();
+      const status = document.getElementById("cta-status");
+      if (!email) return;
+      status.textContent = "Sending…";
+      try {
+        const resp = await fetch(`/api/public/${encodeURIComponent(token)}/request-access`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "Something went wrong");
+        status.innerHTML = "<i class='check icon'></i> " + esc(data.message || "Check your email.");
+      } catch (e) {
+        status.textContent = e.message;
+      }
+    }
+
+    function render(data) {
+      const t = data.todo;
+      const subs = data.subtodos.map((st) => `
+        <div class="item"><i class="angle right icon"></i>
+          <div class="content"><a href="/t/${st.public_token}" style="${st.status === 'done' ? 'text-decoration:line-through' : ''}">
+            ${esc(st.title)}</a> ${statusLabel(st.status)}</div></div>`).join("");
+      const timeline = data.timeline.map(feedEvent).join("");
+
+      document.getElementById("view").innerHTML = `
+        <div class="ui segment" style="margin-top:1rem">
+          <div class="right floated">${statusLabel(t.status)}</div>
+          <h1 class="ui header">${esc(t.title)}</h1>
+          <div class="markdown">${MD.render(t.text)}</div>
+          ${(t.attachments || []).length ? `<div style="margin-top:1rem">${(t.attachments || []).map(chip).join(" ")}</div>` : ""}
+          ${subs ? `<h4 class="ui horizontal divider header">Subtasks</h4><div class="ui list">${subs}</div>` : ""}
+          <h4 class="ui horizontal divider header">Activity</h4>
+          <div class="ui feed" id="timeline">${timeline || "<p style='color:#aaa'>No activity yet.</p>"}</div>
+
+          <h4 class="ui horizontal divider header"><i class="comment icon"></i> Add a comment</h4>
+          <form class="ui reply form" id="comment-form">
+            <div class="field">
+              <input type="text" id="c-name" placeholder="Your name" maxlength="120" required
+                value="${me ? esc((me.name || "").trim() || me.email.split("@")[0]) : ""}" />
+            </div>
+            <div class="field">
+              <textarea id="c-body" rows="3" placeholder="Write a comment (markdown supported)…" required></textarea>
+            </div>
+            <input type="file" id="c-file" style="display:none" />
+            <button type="button" class="ui icon button" id="c-file-btn" title="Attach a file"><i class="upload icon"></i></button>
+            <button class="ui primary button" type="submit"><i class="edit icon"></i> Comment</button>
+            <span id="c-file-name" style="margin-left:.4rem;color:#888;font-size:.85em"></span>
+            <span id="c-status" style="margin-left:.6rem;color:#888"></span>
+          </form>
+        </div>
+        <div style="margin-top:1rem">${ctaHtml()}</div>
+        ${me ? "" : `<div class="ui center aligned basic segment"><a href="/">Have an account? Sign in</a></div>`}`;
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("view").style.display = "block";
+      wireCta();
+      document.getElementById("comment-form").addEventListener("submit", submitComment);
+      document.getElementById("c-file-btn").addEventListener("click", () => document.getElementById("c-file").click());
+      document.getElementById("c-file").addEventListener("change", function () {
+        document.getElementById("c-file-name").textContent = this.files[0] ? this.files[0].name : "";
+      });
+    }
+
+    function appendComment(e) {
+      const tl = document.getElementById("timeline");
+      const placeholder = tl.querySelector("p");
+      if (placeholder) placeholder.remove();
+      const wrap = document.createElement("div");
+      wrap.innerHTML = feedEvent(e);
+      tl.appendChild(wrap.firstElementChild);
+    }
+
+    async function submitComment(ev) {
+      ev.preventDefault();
+      const name = document.getElementById("c-name").value.trim();
+      const body = document.getElementById("c-body").value.trim();
+      const status = document.getElementById("c-status");
+      if (!name || !body) return;
+      status.textContent = "Posting…";
+      try {
+        const resp = await fetch(`/api/public/${encodeURIComponent(token)}/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, body }),
+        });
+        if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || "Failed");
+        const event = await resp.json();
+        const fileInput = document.getElementById("c-file");
+        const file = fileInput.files[0];
+        if (file) {
+          const fd = new FormData();
+          fd.append("file", file);
+          const up = await fetch(
+            `/api/public/${encodeURIComponent(token)}/attachments?owner_type=event&owner_id=${encodeURIComponent(event.id)}`,
+            { method: "POST", body: fd }
+          );
+          if (up.ok) event.attachments = [await up.json()];
+        }
+        appendComment(event);
+        document.getElementById("c-body").value = "";
+        fileInput.value = "";
+        document.getElementById("c-file-name").textContent = "";
+        status.textContent = "Posted!";
+        setTimeout(() => (status.textContent = ""), 2000);
+      } catch (e) {
+        status.textContent = e.message;
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

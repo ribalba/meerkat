@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+todo.db
+todo.db-journal
+uploads
+.git
+.env
+*.md

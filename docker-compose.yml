@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-meerato}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meerato}
+      POSTGRES_DB: ${POSTGRES_DB:-meerato}
+    volumes:
+      # Postgres 18+ stores data in a version-specific subdirectory and expects a
+      # single mount at /var/lib/postgresql (not /var/lib/postgresql/data). This
+      # layout is what enables in-place "pg_upgrade --link" on future upgrades.
+      - pg-data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meerato} -d ${POSTGRES_DB:-meerato}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build: .
+    # Live-reload for development: the current directory is mounted over the image's
+    # /app, and uvicorn watches it. Edits on the host are reflected immediately.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      # Public URL used to build login + share links in emails.
+      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      # CHANGE THIS in production.
+      SECRET_KEY: ${SECRET_KEY:-dev-insecure-secret-change-me}
+      # PostgreSQL (the bundled "db" service).
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-meerato}:${POSTGRES_PASSWORD:-meerato}@db:5432/${POSTGRES_DB:-meerato}
+      # Uploaded files are written under /data (a persistent volume).
+      UPLOAD_DIR: /data/uploads
+      # Email: leave SMTP_HOST empty to print emails to the container logs.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      EMAIL_FROM: ${EMAIL_FROM:-todo@localhost}
+    volumes:
+      # Mount the project source for live reload. /data is a separate path, so the
+      # persistent volume below is unaffected by this bind mount.
+      - .:/app
+      - todo-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  pg-data:
+  todo-data:

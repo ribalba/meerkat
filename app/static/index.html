@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>meerato</title>
+  <meta name="theme-color" content="#2185d0" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/logo-192.png" />
+  <link rel="apple-touch-icon" href="/static/logo-192.png" />
+  <!-- Critical loader styles, inlined so the splash paints on first byte,
+       before the heavy stylesheets below have downloaded. -->
+  <style>
+    html, body { height: 100%; margin: 0; background: #f4f5f7; }
+    #app-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: #ffffff; transition: opacity .4s ease;
+    }
+    #app-loader.loaded { opacity: 0; pointer-events: none; }
+    .app-loader-inner { text-align: center; }
+    .app-loader-logo {
+      width: 92px; height: auto; display: block; margin: 0 auto 1.4rem;
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,.12));
+      animation: loader-bob 1.4s ease-in-out infinite;
+    }
+    @keyframes loader-bob {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-9px); }
+    }
+    .app-loader-bar {
+      width: 168px; height: 4px; margin: 0 auto; border-radius: 4px;
+      background: #e6e8eb; overflow: hidden; position: relative;
+    }
+    .app-loader-bar span {
+      position: absolute; top: 0; left: -40%; width: 40%; height: 100%;
+      border-radius: 4px; background: #2185d0;
+      animation: loader-slide 1.15s ease-in-out infinite;
+    }
+    @keyframes loader-slide {
+      0%   { left: -40%; }
+      100% { left: 100%; }
+    }
+    .app-loader-text {
+      margin-top: 1rem; color: #57606a; font-size: .95rem; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .app-loader-logo { animation: none; }
+      .app-loader-bar span { animation-duration: 2s; }
+    }
+  </style>
+
+  <!-- Heavy stylesheets loaded non-render-blocking so they don't delay the splash. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.css" media="print" onload="this.media='all'" />
+  <link rel="stylesheet" href="/static/css/app.css" media="print" onload="this.media='all'" />
+  <noscript>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.css" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </noscript>
+</head>
+<body>
+  <!-- ===== Loading splash (shown until the app decides login vs. app) ===== -->
+  <div id="app-loader">
+    <div class="app-loader-inner">
+      <img src="/static/img/meerkat-waving.png" alt="" class="app-loader-logo" />
+      <div class="app-loader-bar"><span></span></div>
+      <div class="app-loader-text">Waking the meerkat…</div>
+    </div>
+  </div>
+
+  <!-- ===== Landing / Login ===== -->
+  <div id="login" style="display:none">
+    <div class="landing">
+
+      <!-- Top bar -->
+      <header class="landing-nav" id="top">
+        <div class="landing-nav-inner">
+          <a class="landing-brand" href="/">
+            <span>meerato</span>
+          </a>
+          <nav class="landing-nav-links">
+            <form id="nav-login-form" class="nav-login">
+              <input type="email" id="nav-login-email" placeholder="you@example.com" required />
+              <button class="ui small primary button" type="submit">Login / Try it</button>
+            </form>
+          </nav>
+        </div>
+      </header>
+
+      <!-- Hero: meerkat waving next to the headline -->
+      <section class="landing-hero">
+        <img src="/static/img/meerkat-waving.png" alt="A friendly meerkat waving hello" class="landing-logo" />
+        <div class="landing-hero-copy">
+          <h1 class="landing-title">A to-do list modeled on your&nbsp;life.</h1>
+          <p class="landing-subtitle">
+            meerato groups your tasks the way you actually live, by the parts of
+            your life they belong to. No deadlines to dread, just the right tasks
+            surfacing on the right day, with the people who care kept in the loop.
+          </p>
+        </div>
+      </section>
+
+      <!-- How it works / what's different -->
+      <section id="how" class="landing-features">
+        <h2 class="landing-section-title">What makes meerato different</h2>
+        <p class="landing-section-lede">
+          Most to-do apps give you one big list and a pile of deadlines.
+          meerato is built around how life is actually organized.
+        </p>
+
+        <div class="landing-grid">
+          <article class="landing-card">
+            <div class="landing-card-img">
+              <img src="/static/img/feat-buckets.svg" alt="Tasks grouped into separate Work, Private and Sports club buckets" />
+            </div>
+            <div class="landing-card-body">
+              <h3>Buckets for every part of your life</h3>
+              <p>
+                Group tasks into the topics that belong together: Work, Private,
+                your sports club, that other club, the kids' school. Each bucket
+                keeps its world separate, so nothing bleeds together.
+              </p>
+            </div>
+          </article>
+
+          <article class="landing-card">
+            <div class="landing-card-img">
+              <img src="/static/img/feat-statuses.svg" alt="A task scheduled to move from Backlog to Now on a set date" />
+            </div>
+            <div class="landing-card-body">
+              <h3>Statuses, not deadlines</h3>
+              <p>
+                A task isn't "due." It has a status that tells you when to act.
+                Instead of a deadline, you set <em>when the status should change</em>,
+                and the task lands on your daily to-do list right when it should.
+              </p>
+              <div class="landing-statuses">
+                <span class="landing-status grey"><i class="clipboard list icon"></i>Backlog</span>
+                <span class="landing-status blue"><i class="hourglass half icon"></i>Now</span>
+                <span class="landing-status red"><i class="ban icon"></i>Blocked</span>
+                <span class="landing-status green"><i class="check circle icon"></i>Done</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="landing-card">
+            <div class="landing-card-img">
+              <img src="/static/img/feat-collab.svg" alt="A task shared by link and with watchers added by email" />
+            </div>
+            <div class="landing-card-body">
+              <h3>Built for collaboration</h3>
+              <p>
+                Share a link to any task so people are always up to date, or add
+                their email and they'll be kept in the loop automatically as things
+                change. No accounts to chase, no status meetings.
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- For the nerds -->
+      <section class="landing-features">
+        <h2 class="landing-section-title">Built by nerds, for everyone</h2>
+        <p class="landing-section-lede">
+          Power-user features under the hood, none of the complexity getting in
+          your way.
+        </p>
+
+        <div class="landing-grid">
+          <article class="landing-card">
+            <div class="landing-card-body">
+              <div class="landing-card-icon"><i class="search icon"></i></div>
+              <h3>Regex search</h3>
+              <p>
+                Search is a real regular-expression engine. Match by prefix,
+                alternation or whole words (<code>^Buy</code>,
+                <code>invoice|receipt</code>, <code>\bbug\b</code>) and combine it
+                with status and bucket filters.
+              </p>
+            </div>
+          </article>
+
+          <article class="landing-card">
+            <div class="landing-card-body">
+              <div class="landing-card-icon"><i class="code icon"></i></div>
+              <h3>Simple, well-documented API</h3>
+              <p>
+                Create a task from anywhere with a single POST to your personal
+                endpoint. Wire it into scripts, cron, shortcuts or your shell in
+                seconds. Every parameter is documented right in the app.
+              </p>
+            </div>
+          </article>
+
+          <article class="landing-card">
+            <div class="landing-card-body">
+              <div class="landing-card-icon"><i class="github icon"></i></div>
+              <h3>Fully open source</h3>
+              <p>
+                The whole thing is open source as the
+                <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">meerkat</a>
+                project. Read the code, self-host it, or send a pull request.
+                No lock-in, no black boxes.
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- Login box -->
+      <section class="landing-login-section">
+        <h2 class="landing-login-title">Give it a try</h2>
+        <p class="landing-login-lede">
+          Just pop in your email and start testing, no commitment.
+          We'll never send you marketing or spam, ever.
+        </p>
+        <div class="landing-login">
+          <form id="login-form" class="ui large form">
+            <div class="field">
+              <label>Sign in or create an account</label>
+              <div class="ui left icon input">
+                <i class="mail icon"></i>
+                <input type="email" id="login-email" placeholder="you@example.com" required />
+              </div>
+            </div>
+            <button class="ui fluid large primary submit button" type="submit">
+              Email me a sign-in link
+            </button>
+            <div class="ui hidden message" id="login-message"></div>
+          </form>
+          <p class="landing-login-note">
+            <i class="lock icon"></i> No password needed. We email you a magic link.
+          </p>
+        </div>
+      </section>
+
+      <footer class="landing-footer">
+        <p>
+          <strong>meerato</strong> is the hosted service, provided by RebelProject UG.
+          The software is open source as the
+          <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">meerkat</a>
+          project.
+        </p>
+        <p>
+          <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">
+            <i class="github icon"></i>Open source
+          </a>
+        </p>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- ===== App ===== -->
+  <div id="app" style="display:none; height:100%; flex-direction:column;">
+    <div id="topbar" class="ui inverted blue menu">
+      <a id="rail-toggle" class="item"><i class="bars icon"></i></a>
+      <div class="header item"><img src="/static/logo-192.png" alt="" style="height:2em;margin-right:.4rem">meerato</div>
+      <a class="item js-search-toggle" title="Search tasks"><i class="search icon"></i></a>
+    </div>
+
+    <div id="layout">
+      <div id="rail-backdrop"></div>
+      <aside id="rail">
+        <div id="rail-scroll">
+          <div class="rail-brand">
+            <span class="rail-brand-name"><img src="/static/logo-192.png" alt="" style="height:1.9em;vertical-align:-0.5em;margin-right:.35rem">meerato</span>
+            <a class="rail-search-btn js-search-toggle" title="Search tasks ( / )"><i class="search icon"></i></a>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-label">Status</div>
+            <div class="ui vertical fluid menu rail-menu" id="views-menu"></div>
+          </div>
+
+          <div class="rail-section">
+            <div class="rail-section-head">
+              <div class="rail-section-label">Buckets</div>
+              <button class="rail-add-btn" id="new-bucket-btn" title="New bucket"><i class="plus icon"></i></button>
+            </div>
+            <div class="ui vertical fluid menu rail-menu" id="buckets-menu"></div>
+          </div>
+
+          <div class="rail-section">
+            <div class="rail-section-label">Workspace</div>
+            <div class="ui vertical fluid menu rail-menu">
+              <a class="item" id="watching-btn"><i class="eye icon"></i> Watching</a>
+              <a class="item" id="automation-btn"><i class="robot icon"></i> Automation</a>
+              <a class="item" id="api-btn"><i class="code icon"></i> API</a>
+            </div>
+          </div>
+        </div>
+        <div id="rail-footer">
+          <a id="sync-now" class="rail-icon online" title="Online, click to sync">
+            <i class="sync icon"></i>
+            <span id="pending-badge" class="ui mini circular label" style="display:none">0</span>
+          </a>
+          <a id="notif-btn" class="rail-icon" title="Tasks with new comments">
+            <i class="bell icon"></i>
+            <span id="notif-badge" class="ui mini circular red label" style="display:none">0</span>
+          </a>
+          <a id="settings-btn" class="rail-icon" title="Settings"><i class="cog icon"></i></a>
+        </div>
+      </aside>
+
+      <main id="content">
+        <div id="search-bar" style="display:none">
+          <div class="ui icon input search-input">
+            <i class="search icon"></i>
+            <input type="text" id="search-input" placeholder="Search tasks…  e.g.  status:done  ^Buy" autocomplete="off" spellcheck="false" />
+          </div>
+          <a id="search-help" class="search-icon-btn" title="Search syntax help"><i class="question circle outline icon"></i></a>
+          <a id="search-close" class="search-icon-btn" title="Close search"><i class="times icon"></i></a>
+        </div>
+        <div id="quick-add">
+          <div class="quick-add-row">
+            <div class="ui big left icon input qa-input">
+              <i class="plus icon"></i>
+              <input type="text" id="quick-add-input" placeholder="Add a task…  e.g. Email Sam #Work @sam@example.com !now next week" />
+            </div>
+            <button type="button" id="quick-add-help" class="ui big icon button" title="Smart add syntax" aria-label="Smart add syntax">
+              <i class="question circle outline icon"></i>
+            </button>
+          </div>
+        </div>
+        <div id="todo-list"></div>
+        <div id="empty-state" class="ui placeholder segment" style="display:none">
+          <img id="empty-state-img" src="/static/img/meerkat-no-tasks.png" alt="" style="display:none" />
+          <div class="ui icon header"><i class="check circle outline icon"></i> All done for today. Whoooo!</div>
+        </div>
+
+        <!-- ===== Automation panel (recurring tasks) ===== -->
+        <div id="automation-panel" class="main-panel" style="display:none">
+          <h3 class="ui header"><i class="robot icon"></i>
+            <div class="content">Automation</div>
+          </h3>
+          <p style="color:#888">
+            Recurring tasks create a fresh task automatically on the schedule you choose:
+            every day, week, month or year. Each new task uses the title, description,
+            status, bucket and watcher set below.
+          </p>
+
+          <!-- Top: add / edit a recurring task -->
+          <div class="ui segment" id="rec-form-segment">
+            <h4 class="ui horizontal divider header"><i class="plus square outline icon"></i>
+              <span id="rec-form-title">Add recurring task</span>
+            </h4>
+            <form class="ui form" id="rec-form">
+              <div class="field">
+                <label>Title</label>
+                <input type="text" id="rec-title" placeholder="e.g. Water the plants" />
+              </div>
+              <div class="field">
+                <label>Description</label>
+                <textarea id="rec-text" rows="2" placeholder="Optional details (markdown supported)…"></textarea>
+              </div>
+              <div class="three fields">
+                <div class="field">
+                  <label>Status</label>
+                  <select id="rec-status" class="ui dropdown"></select>
+                </div>
+                <div class="field">
+                  <label>Bucket</label>
+                  <select id="rec-bucket" class="ui dropdown"></select>
+                </div>
+                <div class="field">
+                  <label>Watcher email (optional)</label>
+                  <div class="ui fluid search email-search">
+                    <div class="ui fluid input">
+                      <input class="prompt" type="email" id="rec-watcher" autocomplete="off" placeholder="watcher@example.com" />
+                    </div>
+                    <div class="results"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="two fields">
+                <div class="field">
+                  <label>Repeat</label>
+                  <select id="rec-frequency" class="ui dropdown">
+                    <option value="daily">Every day</option>
+                    <option value="weekly">Once a week</option>
+                    <option value="monthly">Once a month</option>
+                    <option value="yearly">Once a year</option>
+                  </select>
+                </div>
+                <div class="field" id="rec-when-field">
+                  <label>When</label>
+                  <div id="rec-when-controls"></div>
+                </div>
+              </div>
+              <div class="field">
+                <div class="ui checkbox">
+                  <input type="checkbox" id="rec-active" checked />
+                  <label>Active (uncheck to pause without deleting)</label>
+                </div>
+              </div>
+              <button class="ui primary button" type="submit" id="rec-save">
+                <i class="check icon"></i> <span id="rec-save-label">Add recurring task</span>
+              </button>
+              <button class="ui button" type="button" id="rec-cancel" style="display:none">Cancel</button>
+            </form>
+          </div>
+
+          <!-- Bottom: existing recurring tasks -->
+          <h4 class="ui horizontal divider header"><i class="list icon"></i> Automated tasks</h4>
+          <div id="rec-list"></div>
+        </div>
+
+        <!-- ===== API panel (external create endpoint) ===== -->
+        <div id="api-panel" class="main-panel" style="display:none">
+          <h3 class="ui header"><i class="code icon"></i>
+            <div class="content">API</div>
+          </h3>
+          <p style="color:#888">
+            Create a task from anywhere (a script, a shortcut, cron) by POSTing to your
+            personal endpoint. The token below identifies your account, so keep it secret;
+            anyone with it can add tasks for you.
+          </p>
+
+          <h4 class="ui horizontal divider header"><i class="linkify icon"></i> Your endpoint</h4>
+          <div class="ui form">
+            <div class="field">
+              <label>Endpoint (token included)</label>
+              <div class="ui action fluid input">
+                <input type="text" id="api-endpoint" readonly />
+                <button class="ui icon button" id="api-copy-endpoint" title="Copy endpoint"><i class="copy icon"></i></button>
+              </div>
+            </div>
+          </div>
+          <button class="ui basic button" id="api-rotate" style="margin-top:.6rem">
+            <i class="redo icon"></i> Regenerate token
+          </button>
+          <div style="color:#999;font-size:.85em;margin-top:.4rem">
+            Regenerating immediately stops the old token from working.
+          </div>
+
+          <h4 class="ui horizontal divider header"><i class="folder open icon"></i> Defaults for created tasks</h4>
+          <div class="ui form">
+            <div class="two fields">
+              <div class="field">
+                <label>Bucket</label>
+                <select id="api-bucket" class="ui dropdown"></select>
+              </div>
+              <div class="field">
+                <label>Status</label>
+                <select id="api-status" class="ui dropdown"></select>
+              </div>
+            </div>
+          </div>
+
+          <h4 class="ui horizontal divider header"><i class="terminal icon"></i> Example: create a task</h4>
+          <p style="color:#888">Copy and run this. Change the <code>title</code> (and
+            <code>text</code>) to whatever you like.</p>
+          <div class="ui action fluid input" style="margin-bottom:.5rem">
+            <input type="text" id="api-curl-copy-src" readonly style="display:none" />
+            <button class="ui icon button" id="api-copy-curl"><i class="copy icon"></i> Copy curl command</button>
+          </div>
+          <pre id="api-curl" class="api-curl-block"></pre>
+
+          <button class="ui blue fluid button" id="api-software-btn" style="margin-top:1.25rem">
+            <i class="plug icon"></i> How you can use this with software
+          </button>
+
+          <h4 class="ui horizontal divider header"><i class="info circle icon"></i> Parameters</h4>
+          <table class="ui very basic compact table">
+            <tbody>
+              <tr><td><code>title</code></td><td>Required. The task title.</td></tr>
+              <tr><td><code>text</code></td><td>Optional. Description (markdown).</td></tr>
+              <tr><td><code>bucket_id</code></td><td>Optional. Defaults to your first bucket.</td></tr>
+              <tr><td><code>status</code></td><td>Optional. <code>open</code>, <code>on_list</code>, <code>blocked</code> or <code>done</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+
+      <div id="detail-resizer" title="Drag to resize"></div>
+
+      <section id="detail-pane">
+        <div id="detail-mobile-bar">
+          <a id="detail-mobile-close"><i class="arrow left icon"></i> Back to list</a>
+        </div>
+        <div id="detail-body"></div>
+        <!-- Shown while dragging a file over an open task (see setupDetailDropzone). -->
+        <div id="detail-dropzone">
+          <div class="dz-inner">
+            <i class="cloud upload alternate icon"></i>
+            <div>Drop files to attach to this task</div>
+          </div>
+        </div>
+        <!-- Shown while a file is uploading (drop or button); see uploadFilesToTodo. -->
+        <div id="detail-upload">
+          <div class="du-inner">
+            <i class="cloud upload alternate icon du-icon"></i>
+            <div class="du-label" id="du-label">Uploading…</div>
+            <div class="du-bar"><span id="du-bar-fill"></span></div>
+            <div class="du-pct" id="du-pct">0%</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+
+  </div>
+
+  <!-- ===== Settings page ===== -->
+  <div id="settings" style="display:none">
+    <div class="ui inverted blue menu" style="margin:0;border-radius:0">
+      <a class="item" id="settings-back"><i class="arrow left icon"></i> Back</a>
+      <div class="header item"><i class="cog icon"></i>&nbsp;Settings</div>
+    </div>
+    <div class="ui container" style="max-width:680px !important;padding:1.5rem 1rem 4rem">
+      <h4 class="ui horizontal divider header"><i class="user circle icon"></i> Account</h4>
+      <p>Signed in as <strong id="settings-email"></strong></p>
+      <div class="ui form" style="max-width:340px;margin-bottom:1rem">
+        <div class="field">
+          <label>Your name</label>
+          <input type="text" id="profile-name" placeholder="e.g. Alice Smith" />
+          <div style="color:#888;font-size:.85em;margin-top:.3rem">Shown in notification emails to a task's watchers.</div>
+        </div>
+      </div>
+      <button class="ui red button" id="logout"><i class="sign out icon"></i> Logout</button>
+
+      <h4 class="ui horizontal divider header"><i class="globe icon"></i> Timezone</h4>
+      <p style="color:#888">Determines when your scheduled status changes take effect.</p>
+      <select id="tz-select" class="ui dropdown" style="max-width:340px"></select>
+
+      <h4 class="ui horizontal divider header"><i class="plus square outline icon"></i> New tasks</h4>
+      <p style="color:#888">Defaults used when you add a task from the top bar (unless you've filtered to a specific bucket or status).</p>
+      <div class="ui form">
+        <div class="two fields">
+          <div class="field">
+            <label>Default bucket</label>
+            <select id="default-bucket" class="ui dropdown"></select>
+          </div>
+          <div class="field">
+            <label>Default status</label>
+            <select id="default-status" class="ui dropdown"></select>
+          </div>
+        </div>
+      </div>
+
+      <h4 class="ui horizontal divider header"><i class="sort icon"></i> Sidebar order</h4>
+      <p style="color:#888">Use the arrows to reorder the views shown in the sidebar.</p>
+      <div class="ui middle aligned divided list" id="status-order-list"></div>
+
+      <h4 class="ui horizontal divider header"><i class="info circle icon"></i> About</h4>
+      <p>
+        <strong>meerato</strong> is the hosted service. It is open source as the
+        <strong>meerkat</strong> project:
+        <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">
+          <i class="github icon"></i>github.com/ribalba/meerkat</a>
+      </p>
+      <p><a id="settings-terms-link" style="cursor:pointer">Terms &amp; service provider</a></p>
+    </div>
+  </div>
+
+
+  <!-- ===== "Use with software" modal (per-tool reveals) ===== -->
+  <div class="ui modal" id="api-software-modal">
+    <div class="header"><i class="plug icon"></i> Use meerato from other software</div>
+    <div class="scrolling content">
+      <p style="color:#888">Each tool below uses your personal create-task endpoint. Click a
+        tool to reveal how to set it up. The snippets already include your endpoint, token, and
+        the bucket and status selected above.</p>
+
+      <div class="ui styled fluid accordion" id="api-software-accordion">
+        <!-- Shell -->
+        <div class="title">
+          <i class="dropdown icon"></i><i class="terminal icon"></i> Shell (bash / zsh)
+        </div>
+        <div class="content">
+          <p>Add this function to your <code>~/.bashrc</code> or <code>~/.zshrc</code>, then
+            reload your shell. It turns everything you type after <code>todo</code> into a task.</p>
+          <div class="ui action fluid input" style="margin-bottom:.5rem">
+            <button class="ui icon button" id="api-copy-shell"><i class="copy icon"></i> Copy alias</button>
+          </div>
+          <pre id="api-shell-block" class="api-curl-block"></pre>
+          <p style="margin-top:.75rem">Then from any terminal:</p>
+          <pre class="api-curl-block">todo Buy milk and eggs</pre>
+          <p style="color:#999;font-size:.85em;margin-top:.5rem">Double quotes in the title are
+            escaped automatically. No extra tools required, just <code>curl</code>.</p>
+        </div>
+
+        <!-- Alfred -->
+        <div class="title">
+          <i class="dropdown icon"></i><i class="hat wizard icon"></i> Alfred (macOS)
+        </div>
+        <div class="content">
+          <p>With the Alfred <strong>Powerpack</strong> you can add tasks from the Alfred bar.</p>
+          <ol class="api-howto">
+            <li>Open <strong>Alfred Preferences → Workflows</strong>, click <strong>+</strong> and
+              choose <strong>Blank Workflow</strong>. Give it a name like “meerato”.</li>
+            <li>Right-click the canvas → <strong>Inputs → Keyword</strong>. Set the keyword to
+              <code>todo</code>, set <strong>Argument</strong> to <em>Argument Required</em>, and
+              give it a title like “Add a task”.</li>
+            <li>Right-click → <strong>Actions → Run Script</strong>. Set <strong>Language</strong>
+              to <code>/bin/bash</code> and <strong>with input as</strong> <em>argv</em>, then paste
+              the script below.</li>
+            <li>Drag a wire from the Keyword to the Run Script action to connect them.</li>
+            <li>Optionally add <strong>Outputs → Post Notification</strong> after it to confirm.</li>
+          </ol>
+          <div class="ui action fluid input" style="margin-bottom:.5rem">
+            <button class="ui icon button" id="api-copy-alfred"><i class="copy icon"></i> Copy script</button>
+          </div>
+          <pre id="api-alfred-block" class="api-curl-block"></pre>
+          <p style="color:#999;font-size:.85em;margin-top:.5rem">Now type
+            <code>todo Buy milk</code> in Alfred to create the task.</p>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui primary approve button">Done</div>
+    </div>
+  </div>
+
+  <!-- ===== Terms / about modal ===== -->
+  <div class="ui small modal" id="terms-modal">
+    <div class="header"><i class="info circle icon"></i> Terms &amp; Service</div>
+    <div class="content">
+      <p><strong>meerato</strong> is provided by <strong>RebelProject UG</strong>.</p>
+      <p>Contact: <a href="mailto:contact@meerato.com">contact@meerato.com</a></p>
+      <p>The software is open source, the <strong>meerkat</strong> project:
+        <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">
+          github.com/ribalba/meerkat</a>.</p>
+      <p style="color:#888;font-size:.9em">By using this service you agree to use it
+        lawfully and at your own risk. The service is provided "as is", without warranty.
+        Please contact us with any questions about your data.</p>
+    </div>
+    <div class="actions">
+      <div class="ui primary approve button">Close</div>
+    </div>
+  </div>
+
+  <!-- ===== New comments list ===== -->
+  <div class="ui modal" id="notif-modal">
+    <div class="header"><i class="bell icon"></i> Tasks with new comments</div>
+    <div class="scrolling content" id="notif-list"></div>
+    <div class="actions">
+      <div class="ui button" id="notif-clear"><i class="check icon"></i> Mark all as read</div>
+      <div class="ui cancel button">Close</div>
+    </div>
+  </div>
+
+  <!-- ===== First-time name prompt ===== -->
+  <div class="ui small modal" id="name-modal">
+    <div class="header"><i class="user circle icon"></i> What should we call you?</div>
+    <div class="content">
+      <p>We include your name in the email notifications we send to a task's watchers, so
+        they know who made a change, for example <em>"Alice changed the status to Done"</em>.
+        You can change or remove it anytime in Settings.</p>
+      <div class="ui form">
+        <div class="field">
+          <input type="text" id="name-modal-input" placeholder="Your name" />
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button">Skip for now</div>
+      <div class="ui primary approve button">Save</div>
+    </div>
+  </div>
+
+  <!-- ===== New / edit bucket modal ===== -->
+  <div class="ui mini modal" id="bucket-modal">
+    <div class="header" id="bucket-modal-title">New bucket</div>
+    <div class="content">
+      <form class="ui form" id="bucket-form">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="bucket-name" placeholder="e.g. Work, Home, Side project" />
+        </div>
+      </form>
+    </div>
+    <div class="actions">
+      <div class="ui cancel button">Cancel</div>
+      <div class="ui primary approve button">Save</div>
+    </div>
+  </div>
+
+  <!-- ===== Smart add syntax help ===== -->
+  <div class="ui small modal" id="syntax-modal">
+    <div class="header"><i class="magic icon"></i> Smart add syntax</div>
+    <div class="content">
+      <p>Type your task as usual. Add any of these and meerato sets them up automatically:</p>
+      <table class="ui very basic compact table">
+        <tbody>
+          <tr>
+            <td><code>#Bucket</code></td>
+            <td>File it under an existing bucket by name, e.g. <code>#Work</code> or <code>#Side project</code>.</td>
+          </tr>
+          <tr>
+            <td><code>@who@example.com</code></td>
+            <td>Add a watcher by email (they get an invite). Add several by repeating it.</td>
+          </tr>
+          <tr>
+            <td><code>!status</code></td>
+            <td>Set the status: <code>!now</code>, <code>!backlog</code>, <code>!blocked</code> or <code>!done</code>.</td>
+          </tr>
+          <tr>
+            <td>a date <em>at the end</em></td>
+            <td>Start the task in <strong>Backlog</strong> and automatically move it to
+              <strong>Now</strong> on that day.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4 class="ui horizontal divider header">Date phrases (put them last)</h4>
+      <table class="ui very basic compact table">
+        <tbody>
+          <tr><td><code>tomorrow</code></td><td>The next day.</td></tr>
+          <tr><td><code>in 3 days</code> · <code>in 2 weeks</code> · <code>in 1 month</code></td><td>Relative to today.</td></tr>
+          <tr><td><code>next week</code></td><td>The coming Monday (weeks start on Monday).</td></tr>
+          <tr><td><code>next month</code> · <code>next year</code></td><td>The 1st of next month · January 1st.</td></tr>
+          <tr><td><code>monday</code> … <code>sunday</code></td><td>The next time that weekday comes around (also <code>next friday</code>).</td></tr>
+          <tr><td><code>on 2026-07-15</code></td><td>A specific date (YYYY-MM-DD).</td></tr>
+        </tbody>
+      </table>
+
+      <div class="ui info message">
+        <i class="lightbulb icon"></i>
+        Example: <code>Email Sam about the report #Work @sam@example.com next week</code>
+      </div>
+      <p style="color:#888;font-size:.9em">
+        If an email isn't valid or a bucket name doesn't exist, that part stays in the
+        task title untouched, nothing is lost.
+      </p>
+    </div>
+    <div class="actions"><div class="ui primary approve button">Got it</div></div>
+  </div>
+
+  <!-- ===== Search syntax help ===== -->
+  <div class="ui small modal" id="search-help-modal">
+    <div class="header"><i class="search icon"></i> Searching tasks</div>
+    <div class="content">
+      <p>Type to search across every task's <strong>title and notes</strong>. All conditions
+        you give must match (filters and text are combined with AND).</p>
+
+      <h4 class="ui horizontal divider header">Text is a regular expression</h4>
+      <p>The free text (anything that isn't a <code>key:value</code> filter) is treated as a
+        case-insensitive regular expression matched against the title and notes.</p>
+      <table class="ui very basic compact table">
+        <tbody>
+          <tr><td><code>report</code></td><td>contains "report" anywhere</td></tr>
+          <tr><td><code>^Buy</code></td><td>title/notes starting with "Buy"</td></tr>
+          <tr><td><code>invoice|receipt</code></td><td>matches "invoice" or "receipt"</td></tr>
+          <tr><td><code>\bbug\b</code></td><td>the whole word "bug"</td></tr>
+        </tbody>
+      </table>
+
+      <h4 class="ui horizontal divider header">Filters</h4>
+      <table class="ui very basic compact table">
+        <tbody>
+          <tr>
+            <td><code>status:&lt;value&gt;</code></td>
+            <td>Filter by status. Values: <code>backlog</code> (or <code>open</code>),
+              <code>on_list</code> (or <code>todo</code>), <code>blocked</code>, <code>done</code>.
+              Repeat to match any of several, e.g. <code>status:blocked status:done</code>.</td>
+          </tr>
+          <tr>
+            <td><code>bucket:&lt;name&gt;</code></td>
+            <td>Filter by bucket name (partial match), e.g. <code>bucket:work</code>.
+              Use quotes for names with spaces: <code>bucket:"side project"</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h4 class="ui horizontal divider header">Combine them</h4>
+      <p><code>status:done bucket:work meeting</code>: done tasks in a "work" bucket whose
+        title or notes match <code>meeting</code>.</p>
+    </div>
+    <div class="actions">
+      <div class="ui primary approve button">Got it</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.3/dist/semantic.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="/static/js/db.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/markdown.js"></script>
+  <script src="/static/js/sync.js"></script>
+  <!-- app.core.js must load first (it creates window.App); app.boot.js last. -->
+  <script src="/static/js/app.core.js"></script>
+  <script src="/static/js/app.shell.js"></script>
+  <script src="/static/js/app.quickadd.js"></script>
+  <script src="/static/js/app.autocomplete.js"></script>
+  <script src="/static/js/app.list.js"></script>
+  <script src="/static/js/app.detail.js"></script>
+  <script src="/static/js/app.watching.js"></script>
+  <script src="/static/js/app.automation.js"></script>
+  <script src="/static/js/app.apipage.js"></script>
+  <script src="/static/js/app.boot.js"></script>
+</body>
+</html>

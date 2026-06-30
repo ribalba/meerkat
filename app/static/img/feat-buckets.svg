@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 190" role="img" aria-label="Tasks grouped into separate buckets for Work, Private and Club">
+  <rect width="360" height="190" fill="#eef7fe"/>
+  <!-- Bucket: Work -->
+  <g transform="translate(28,22)">
+    <rect width="304" height="44" rx="9" fill="#ffffff" stroke="#e6e8eb"/>
+    <rect width="5" height="44" rx="2.5" fill="#2185d0"/>
+    <text x="20" y="20" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328">Work</text>
+    <rect x="20" y="28" width="120" height="6" rx="3" fill="#d8dee4"/>
+    <circle cx="290" cy="22" r="5" fill="#2185d0"/>
+  </g>
+  <!-- Bucket: Private -->
+  <g transform="translate(28,73)">
+    <rect width="304" height="44" rx="9" fill="#ffffff" stroke="#e6e8eb"/>
+    <rect width="5" height="44" rx="2.5" fill="#1a7f37"/>
+    <text x="20" y="20" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328">Private</text>
+    <rect x="20" y="28" width="150" height="6" rx="3" fill="#d8dee4"/>
+    <circle cx="290" cy="22" r="5" fill="#1a7f37"/>
+  </g>
+  <!-- Bucket: Club -->
+  <g transform="translate(28,124)">
+    <rect width="304" height="44" rx="9" fill="#ffffff" stroke="#e6e8eb"/>
+    <rect width="5" height="44" rx="2.5" fill="#bf8700"/>
+    <text x="20" y="20" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328">Sports club</text>
+    <rect x="20" y="28" width="96" height="6" rx="3" fill="#d8dee4"/>
+    <circle cx="290" cy="22" r="5" fill="#bf8700"/>
+  </g>
+</svg>

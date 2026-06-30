@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 190" role="img" aria-label="A task whose status is scheduled to change from Backlog to To Be Done Now on a set date">
+  <rect width="360" height="190" fill="#eef7fe"/>
+  <!-- Task card -->
+  <g transform="translate(28,26)">
+    <rect width="304" height="138" rx="11" fill="#ffffff" stroke="#e6e8eb"/>
+    <!-- task title -->
+    <rect x="22" y="24" width="150" height="8" rx="4" fill="#c9d1d9"/>
+
+    <!-- status pills with arrow -->
+    <g transform="translate(22,52)">
+      <!-- Backlog (current) -->
+      <rect width="86" height="26" rx="13" fill="#f6f8fa" stroke="#d0d7de"/>
+      <circle cx="17" cy="13" r="4" fill="#6e7781"/>
+      <text x="30" y="17" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="11" font-weight="600" fill="#57606a">Backlog</text>
+      <!-- arrow -->
+      <path d="M98 13 H128" stroke="#8c959f" stroke-width="2" fill="none"/>
+      <path d="M125 8 L132 13 L125 18 Z" fill="#8c959f"/>
+      <!-- To Be Done Now (target) -->
+      <g transform="translate(140,0)">
+        <rect width="122" height="26" rx="13" fill="#eef7fe" stroke="#bfe0fb"/>
+        <circle cx="17" cy="13" r="4" fill="#2185d0"/>
+        <text x="30" y="17" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="11" font-weight="700" fill="#2185d0">To Be Done Now</text>
+      </g>
+    </g>
+
+    <!-- scheduled date row -->
+    <g transform="translate(22,98)">
+      <rect width="20" height="20" rx="4" fill="#ffffff" stroke="#d0d7de"/>
+      <rect x="0" y="0" width="20" height="6" rx="3" fill="#2185d0"/>
+      <rect x="4" y="11" width="5" height="5" rx="1" fill="#8c959f"/>
+      <rect x="12" y="11" width="5" height="5" rx="1" fill="#8c959f"/>
+      <text x="32" y="14" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="11.5" fill="#57606a">Moves to your list on</text>
+      <text x="170" y="14" font-family="-apple-system,Segoe UI,Arial,sans-serif" font-size="11.5" font-weight="700" fill="#1f2328">Mon, Jul 6</text>
+    </g>
+  </g>
+</svg>
