@@ -141,13 +141,21 @@
     try { await Sync.flush(); } catch (e) { /* offline */ }
     await ensureDefaultBuckets();
     await initCommentSeen();
+
+    // With no deep link, default to the first sidebar view (the user's saved
+    // order, "Now" by default) rather than leaving the "all" filter unselected.
+    const params = new URLSearchParams(location.search);
+    if (!params.get("watch") && !params.get("todo") && !params.get("watching")) {
+      const order = await getViewOrder();
+      if (order.length) state.statusFilter = order[0];
+    }
+
     await App.renderAll();
 
     // Deep links: /?watch=<public_token> opens the Watching tab with that shared
     // task selected (from the public share page); /?todo=<id> from an invite/access
     // link (may be a task shared with me, not one I own); /?watching=1 to open the
     // Watching page.
-    const params = new URLSearchParams(location.search);
     const watchToken = params.get("watch");
     const todoId = params.get("todo");
     if (watchToken) {
