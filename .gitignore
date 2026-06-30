@@ -11,7 +11,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
 lib/
@@ -222,3 +221,9 @@ todo.db
 todo.db-journal
 uploads/
 .DS_Store
+
+# Built desktop installers copied in by `npm run dist` (electron). These are
+# 100+ MB and exceed GitHub's file size limit, so keep the folder tracked but
+# never commit the binaries themselves.
+/app/static/downloads/*
+!/app/static/downloads/.gitkeep
