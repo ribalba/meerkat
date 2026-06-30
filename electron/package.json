@@ -9,8 +9,7 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder && npm run copy:web",
-    "copy:web": "node scripts/copy-to-web.js"
+    "dist": "electron-builder"
   },
   "devDependencies": {
     "electron": "42.5.1",

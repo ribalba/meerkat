@@ -11,8 +11,8 @@
 const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("path");
 
-// The hosted instance this app wraps. Defaults to a local dev server.
-const APP_URL = (process.env.MEERATO_URL || "http://localhost:8000").replace(/\/+$/, "");
+// The hosted instance this app wraps. Defaults to the hosted Meerato instance.
+const APP_URL = (process.env.MEERATO_URL || "https://meerato.com/login").replace(/\/+$/, "");
 const APP_ORIGIN = new URL(APP_URL).origin;
 const PROTOCOL = "meerato";
 
@@ -72,7 +72,9 @@ function createWindow() {
 }
 
 function loadApp() {
-  mainWindow.loadURL(APP_URL);
+  // Open the dedicated sign-in page rather than the marketing landing at "/".
+  // If a session already exists, that page redirects straight into the app.
+  mainWindow.loadURL(`${APP_URL}/login`);
 }
 
 function errorPage() {

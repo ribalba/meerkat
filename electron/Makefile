@@ -3,7 +3,7 @@
 # The app points at the hosted instance via the MEERATO_URL env var (see main.js).
 # Override it on the command line if needed, e.g.  make start MEERATO_URL=http://localhost:8000
 
-MEERATO_URL ?= https://meerato.com/
+MEERATO_URL ?= https://meerato.com/login
 export MEERATO_URL
 
 NPM ?= npm

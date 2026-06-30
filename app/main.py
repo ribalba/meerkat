@@ -77,6 +77,14 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/login")
+def login_page() -> FileResponse:
+    # A dedicated, lightweight sign-in page the desktop (Electron) app points to,
+    # instead of the full marketing landing at "/". Redirects into the app once a
+    # session exists (see login.html).
+    return FileResponse(STATIC_DIR / "login.html")
+
+
 @app.get("/t/{token}")
 def share_page(token: str) -> FileResponse:
     # The share page reads the token from the URL client-side.
