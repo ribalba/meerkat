@@ -1,7 +1,7 @@
 {
   "name": "meerato-desktop",
   "productName": "Meerato",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Desktop wrapper for the Meerato to-do app.",
   "main": "main.js",
   "author": "Meerato",

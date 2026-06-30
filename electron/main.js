@@ -12,7 +12,7 @@ const { app, BrowserWindow, shell, Menu } = require("electron");
 const path = require("path");
 
 // The hosted instance this app wraps. Defaults to the hosted Meerato instance.
-const APP_URL = (process.env.MEERATO_URL || "https://meerato.com/login").replace(/\/+$/, "");
+const APP_URL = (process.env.MEERATO_URL || "https://meerato.com").replace(/\/+$/, "");
 const APP_ORIGIN = new URL(APP_URL).origin;
 const PROTOCOL = "meerato";
 

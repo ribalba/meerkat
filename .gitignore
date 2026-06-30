@@ -9,6 +9,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# ...but the Electron app keeps its icon and build assets under electron/build,
+# which is NOT a Python build artifact and must stay tracked.
+!electron/build/
 develop-eggs/
 dist/
 eggs/
