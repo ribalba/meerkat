@@ -66,9 +66,8 @@ def create_login_token(db: DBSession, email: str, redirect_todo_id: str | None =
 
 def consume_login_token(db: DBSession, token: str) -> tuple[User, str | None]:
     lt = db.query(LoginToken).filter(LoginToken.token == token).one_or_none()
-    if lt is None or lt.used or lt.expires_at < utcnow():
+    if lt is None or lt.expires_at < utcnow():
         raise HTTPException(status_code=400, detail="Invalid or expired login link")
-    lt.used = True
     user = get_or_create_user(db, lt.email)
     db.commit()
     return user, lt.redirect_todo_id

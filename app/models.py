@@ -69,13 +69,18 @@ class User(Base):
 
 
 class LoginToken(Base):
-    """Single-use magic link token emailed to a user."""
+    """Magic link token emailed to a user, valid until it expires.
+
+    Reusable within its TTL so that mobile mail clients / link prefetchers
+    that hit the link before the user does don't invalidate it.
+    """
 
     __tablename__ = "login_tokens"
 
     token: Mapped[str] = mapped_column(String(64), primary_key=True)
     email: Mapped[str] = mapped_column(String(320), index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # Retained for backwards compatibility; no longer enforced (see consume_login_token).
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     # Optional todo the login is scoped to (watcher invite flow) for redirect after login.
     redirect_todo_id: Mapped[str | None] = mapped_column(String(36))
