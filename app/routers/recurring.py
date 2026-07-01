@@ -54,7 +54,7 @@ def list_recurring(db: DBSession = Depends(get_db), user=Depends(get_current_use
 def create_recurring(
     payload: RecurringTaskCreate, db: DBSession = Depends(get_db), user=Depends(get_current_user)
 ):
-    valid_status(payload.status)
+    valid_status(db, user.id, payload.status)
     get_owned_bucket(db, payload.bucket_id, user)
     dow, dom, moy = _validate_cadence(
         payload.frequency, payload.day_of_week, payload.day_of_month, payload.month_of_year
@@ -93,7 +93,7 @@ def update_recurring(
 
     data = payload.model_dump(exclude_unset=True)
     if "status" in data and data["status"] is not None:
-        valid_status(data["status"])
+        valid_status(db, user.id, data["status"])
     if "bucket_id" in data and data["bucket_id"] is not None:
         get_owned_bucket(db, data["bucket_id"], user)
     if "watcher_email" in data:

@@ -614,6 +614,27 @@
         </div>
       </div>
 
+      <h4 class="ui horizontal divider header"><i class="tags icon"></i> Custom statuses</h4>
+      <p style="color:#888">Add your own statuses alongside the built-in Backlog, Now, Blocked and Done. Deleting one moves its tasks back to Backlog.</p>
+      <div class="ui middle aligned divided list" id="custom-status-list"></div>
+      <div class="ui form" style="margin-top:.8rem">
+        <div class="fields">
+          <div class="six wide field">
+            <input type="text" id="cs-label" placeholder="Name, e.g. In review" maxlength="60" />
+          </div>
+          <div class="four wide field">
+            <select id="cs-color" class="ui dropdown"></select>
+          </div>
+          <div class="four wide field">
+            <input type="text" id="cs-icon" placeholder="Icon, e.g. eye" />
+          </div>
+          <div class="two wide field">
+            <button class="ui primary icon button" id="cs-add" title="Add status"><i class="plus icon"></i></button>
+          </div>
+        </div>
+        <div style="color:#888;font-size:.85em">Icon names come from <a href="https://fomantic-ui.com/elements/icon.html" target="_blank" rel="noopener">Fomantic UI</a> (e.g. "eye", "star", "bug").</div>
+      </div>
+
       <h4 class="ui horizontal divider header"><i class="sort icon"></i> Sidebar order</h4>
       <p style="color:#888">Use the arrows to reorder the views shown in the sidebar.</p>
       <div class="ui middle aligned divided list" id="status-order-list"></div>

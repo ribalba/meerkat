@@ -13,6 +13,7 @@ from .models import (
     STATUS_LABELS,
     Attachment,
     Bucket,
+    CustomStatus,
     Event,
     EventType,
     ScheduledStatusChange,
@@ -78,8 +79,8 @@ def log_todo_changes(db: DBSession, todo: Todo, before: dict, actor) -> None:
     summary: list[str] = []
 
     if todo.status != before["status"]:
-        old_l = STATUS_LABELS.get(before["status"], before["status"])
-        new_l = STATUS_LABELS.get(todo.status, todo.status)
+        old_l = status_label(db, todo.owner_id, before["status"])
+        new_l = status_label(db, todo.owner_id, todo.status)
         record_event(
             db, todo, EventType.status_changed,
             body=f"Status: {old_l} → {new_l}", actor_email=actor_email,
@@ -276,11 +277,31 @@ def attach_to_events(db: DBSession, events: list[Event]) -> list[Event]:
 # --- Validation & lookups (shared across routers) ---
 
 
-def valid_status(value: str) -> str:
-    """Return ``value`` if it is a known todo status, else raise 422."""
-    if value not in STATUS_LABELS:
+def _custom_status(db: DBSession, owner_id: str, value: str) -> CustomStatus | None:
+    return (
+        db.query(CustomStatus)
+        .filter(CustomStatus.owner_id == owner_id, CustomStatus.value == value)
+        .first()
+    )
+
+
+def valid_status(db: DBSession, owner_id: str, value: str) -> str:
+    """Return ``value`` if it is a built-in or one of ``owner_id``'s custom
+    statuses, else raise 422."""
+    if value in STATUS_LABELS:
+        return value
+    if _custom_status(db, owner_id, value) is None:
         raise HTTPException(status_code=422, detail=f"Invalid status: {value}")
     return value
+
+
+def status_label(db: DBSession, owner_id: str, value: str) -> str:
+    """Human-readable label for a status value (built-in or custom). Falls back
+    to the raw value if it is unknown (e.g. a since-deleted custom status)."""
+    if value in STATUS_LABELS:
+        return STATUS_LABELS[value]
+    cs = _custom_status(db, owner_id, value)
+    return cs.label if cs else value
 
 
 def get_owned_bucket(db: DBSession, bucket_id: str, user: User) -> Bucket:

@@ -129,6 +129,7 @@
     bindShellEvents();
     setupResizer();
     setupDetailDropzone();
+    await App.loadStatuses(); // custom statuses extend STATUS before anything renders
     await loadLabels();
     await App.renderViews();
 
@@ -261,6 +262,8 @@
     });
     $("#default-bucket").on("change", function () { DB.setMeta("default_bucket", this.value); });
     $("#default-status").on("change", function () { DB.setMeta("default_status", this.value); });
+    $("#cs-add").on("click", addCustomStatus);
+    $("#cs-label, #cs-icon").on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addCustomStatus(); } });
     $("#tz-select").on("change", async function () {
       try {
         const u = await API.patch("/api/auth/me", { timezone: this.value });
@@ -520,6 +523,7 @@
   function showSettings() {
     $("#settings-email").text(state.user.email);
     $("#profile-name").val(state.user.name || "");
+    renderCustomStatuses();
     renderViewOrderEditor();
     renderNewTaskDefaults();
     renderTimezone();
@@ -531,6 +535,78 @@
     $("#settings").hide();
     $("#app").css("display", "flex");
     await App.renderViews(); // ensure the sidebar reflects any new order
+  }
+
+  // ---- Custom statuses (Settings) ----
+  // Fomantic UI's named colours, offered in the colour picker.
+  const STATUS_COLORS = [
+    "grey", "black", "red", "orange", "yellow", "olive", "green",
+    "teal", "blue", "violet", "purple", "pink", "brown",
+  ];
+
+  function renderCustomStatuses() {
+    const customs = App.customStatuses();
+    $("#custom-status-list").html(
+      customs.length
+        ? customs
+            .map(
+              (s) => `
+          <div class="item" data-id="${s.id}">
+            <div class="right floated content">
+              <button class="ui icon mini button cs-del" title="Delete status"><i class="trash icon"></i></button>
+            </div>
+            <i class="${s.color} ${esc(s.icon)} icon" style="line-height:1.8"></i>
+            <div class="content"><div class="header">${esc(s.label)}</div></div>
+          </div>`
+            )
+            .join("")
+        : "<div style='color:#aaa;padding:.4rem 0'>No custom statuses yet.</div>"
+    );
+    $("#custom-status-list .cs-del").on("click", function () {
+      deleteCustomStatus($(this).closest(".item").data("id"));
+    });
+    if (!$("#cs-color option").length) {
+      $("#cs-color").html(STATUS_COLORS.map((c) => `<option value="${c}">${c}</option>`).join(""));
+    }
+  }
+
+  async function addCustomStatus() {
+    const label = $("#cs-label").val().trim();
+    if (!label) return;
+    try {
+      await API.post("/api/statuses", {
+        label,
+        color: $("#cs-color").val() || "grey",
+        icon: ($("#cs-icon").val() || "").trim() || "circle",
+        position: Date.now(),
+      });
+      $("#cs-label").val("");
+      $("#cs-icon").val("");
+      await refreshAfterStatusChange();
+      toast("Status added");
+    } catch (e) {
+      toast(errText(e), "error");
+    }
+  }
+
+  async function deleteCustomStatus(id) {
+    try {
+      await API.del(`/api/statuses/${id}`);
+      await refreshAfterStatusChange();
+      await App.renderAll(); // tasks moved back to Backlog need re-rendering
+      toast("Status removed");
+    } catch (e) {
+      toast(errText(e), "error");
+    }
+  }
+
+  // Reload the status list and re-render everything that displays statuses.
+  async function refreshAfterStatusChange() {
+    await App.loadStatuses();
+    renderCustomStatuses();
+    await renderViewOrderEditor();
+    renderNewTaskDefaults();
+    await App.renderViews();
   }
 
   async function renderViewOrderEditor() {

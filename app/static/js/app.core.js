@@ -16,13 +16,49 @@
   const App = (window.App = window.App || {});
   const $ = window.jQuery;
 
-  const STATUS = [
+  // The four built-in statuses. They always exist (defined here and on the
+  // server) and can't be removed; users add custom statuses on top of them.
+  const BUILTIN_STATUS = [
     { value: "open", label: "Backlog", color: "grey", icon: "clipboard list" },
     { value: "on_list", label: "Now", color: "blue", icon: "hourglass half" },
     { value: "blocked", label: "Blocked", color: "red", icon: "ban" },
     { value: "done", label: "Done", color: "green", icon: "check circle" },
   ];
+  const BUILTIN_VALUES = new Set(BUILTIN_STATUS.map((s) => s.value));
+  // The live status list = built-ins followed by the user's custom statuses
+  // (loaded at boot via loadStatuses). It is mutated IN PLACE by
+  // setCustomStatuses so the many modules that destructured this array at load
+  // time keep referencing the current list.
+  const STATUS = BUILTIN_STATUS.map((s) => ({ ...s }));
   const statusOf = (v) => STATUS.find((s) => s.value === v) || STATUS[0];
+  const isBuiltinStatus = (v) => BUILTIN_VALUES.has(v);
+  const customStatuses = () => STATUS.filter((s) => s.custom);
+
+  // Rebuild STATUS in place: built-ins first, then the given custom statuses.
+  function setCustomStatuses(list) {
+    const customs = (list || []).map((c) => ({
+      value: c.value,
+      label: c.label,
+      color: c.color || "grey",
+      icon: c.icon || "circle",
+      id: c.id,
+      custom: true,
+    }));
+    STATUS.splice(0, STATUS.length, ...BUILTIN_STATUS.map((s) => ({ ...s })), ...customs);
+  }
+
+  // Fetch the user's custom statuses and merge them into STATUS. Falls back to
+  // the last cached list when offline so known statuses still render.
+  async function loadStatuses() {
+    let list = (await DB.getMeta("custom_statuses", [])) || [];
+    try {
+      list = await API.get("/api/statuses");
+      await DB.setMeta("custom_statuses", list);
+    } catch (e) {
+      /* offline or request failed: use the cached list */
+    }
+    setCustomStatuses(list);
+  }
 
   const state = {
     user: null,
@@ -269,9 +305,11 @@
 
   async function getViewOrder() {
     const saved = await DB.getMeta("view_order", null);
-    // Default order shown to new users ("Now" first); existing users keep
-    // whatever order they've saved.
-    const DEFAULT_ORDER = ["on_list", "all", "open", "blocked", "done"];
+    // Default order shown to new users ("Now" first, custom statuses last);
+    // existing users keep whatever order they've saved. Any custom status not
+    // already in the saved order is appended so new ones still appear.
+    const customVals = STATUS.filter((s) => s.custom).map((s) => s.value);
+    const DEFAULT_ORDER = ["on_list", "all", "open", "blocked", "done", ...customVals];
     const valid = new Set(["all", ...STATUS.map((s) => s.value)]);
     const order = Array.isArray(saved) ? saved.filter((v) => valid.has(v)) : [];
     for (const v of DEFAULT_ORDER) if (!order.includes(v)) order.push(v);
@@ -279,7 +317,8 @@
   }
 
   Object.assign(App, {
-    $, STATUS, statusOf, EVENT_ICON, ALL_VIEW, STATUS_ALIASES, state,
+    $, STATUS, BUILTIN_STATUS, statusOf, isBuiltinStatus, customStatuses,
+    setCustomStatuses, loadStatuses, EVENT_ICON, ALL_VIEW, STATUS_ALIASES, state,
     esc, asUtc, fmtDate, toast, isValidEmail, displayActor, errText, copyText,
     liveBuckets, liveTodos, bucketName,
     parseSearch, statusMatches, searchMatch,

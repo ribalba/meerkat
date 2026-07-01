@@ -50,6 +50,10 @@ STATUS_LABELS = {
     TodoStatus.done.value: "Done",
 }
 
+# Values a user-defined status may not reuse: the four built-ins (which always
+# exist, in code) plus the "all" sidebar view. See CustomStatus.
+RESERVED_STATUS_VALUES = set(STATUS_LABELS) | {"all"}
+
 
 # --- Auth -----------------------------------------------------------------
 
@@ -222,6 +226,35 @@ class ScheduledStatusChange(Base):
     scheduled_for: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)
     applied: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CustomStatus(Base):
+    """A user-defined status, additive to the four built-in statuses.
+
+    Owner-scoped. The built-ins (open/on_list/blocked/done) live in code and
+    always exist; these rows extend the list. ``value`` is a slug generated from
+    the label, unique per owner, and never collides with a built-in or the "all"
+    view (see RESERVED_STATUS_VALUES). Fetched by the client at boot via
+    ``GET /api/statuses`` to build its full status list.
+
+    Not part of offline sync: statuses are edited online (like recurring tasks);
+    the client caches the last-fetched list so it can still render known ones
+    while offline.
+    """
+
+    __tablename__ = "custom_statuses"
+    __table_args__ = (UniqueConstraint("owner_id", "value", name="uq_custom_status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    value: Mapped[str] = mapped_column(String(30), nullable=False)
+    label: Mapped[str] = mapped_column(String(60), nullable=False)
+    color: Mapped[str] = mapped_column(String(20), default="grey")
+    icon: Mapped[str] = mapped_column(String(40), default="circle")
+    # BigInteger: the client orders with `Date.now()` (see Bucket.position).
+    position: Mapped[int] = mapped_column(BigInteger, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class RepeatFreq(str, Enum):

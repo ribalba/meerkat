@@ -49,6 +49,33 @@ class ScheduleOut(BaseModel):
     applied: bool
 
 
+# --- Custom statuses ---
+
+
+class CustomStatusBase(BaseModel):
+    label: str = Field(min_length=1, max_length=60)
+    color: str = "grey"
+    icon: str = "circle"
+    position: int = 0
+
+
+class CustomStatusCreate(CustomStatusBase):
+    pass
+
+
+class CustomStatusUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=1, max_length=60)
+    color: str | None = None
+    icon: str | None = None
+    position: int | None = None
+
+
+class CustomStatusOut(CustomStatusBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    value: str
+
+
 # --- External create-task API ---
 
 

@@ -28,7 +28,7 @@ def api_create_todo(
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid API token")
 
-    valid_status(payload.status)
+    valid_status(db, user.id, payload.status)
 
     # Pick the target bucket: the one supplied (must be the caller's), else their
     # first non-archived bucket.

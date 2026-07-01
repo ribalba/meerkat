@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session as DBSession
 
 from ..database import get_db
 from ..models import (
-    STATUS_LABELS,
     Bucket,
     Event,
     EventType,
@@ -35,6 +34,7 @@ from ..services import (
     notify_watchers,
     record_event,
     snapshot,
+    status_label,
     touch,
     valid_status,
 )
@@ -77,7 +77,7 @@ def create_todo(payload: TodoCreate, db: DBSession = Depends(get_db), user=Depen
         owner_id=user.id,
         title=payload.title,
         text=payload.text,
-        status=valid_status(payload.status),
+        status=valid_status(db, user.id, payload.status),
         position=payload.position,
         public_token=new_id().replace("-", ""),
     )
@@ -103,7 +103,7 @@ def update_todo(
     todo = get_owned_todo(db, todo_id, user)
     changes = payload.model_dump(exclude_unset=True)
     if "status" in changes:
-        valid_status(changes["status"])
+        valid_status(db, user.id, changes["status"])
 
     # Snapshot, apply, then log every change + notify watchers (shared with the sync path).
     before = snapshot(todo)
@@ -224,7 +224,7 @@ def create_schedule(
     todo_id: str, payload: ScheduleCreate, db: DBSession = Depends(get_db), user=Depends(get_current_user)
 ):
     todo = get_owned_todo(db, todo_id, user)
-    valid_status(payload.status)
+    valid_status(db, user.id, payload.status)
     # Fire at the start of the chosen day in the user's timezone, stored as naive UTC.
     run_at = start_of_day_utc(payload.date, user.timezone)
 
@@ -238,7 +238,7 @@ def create_schedule(
     db.add(sched)
     record_event(
         db, todo, EventType.scheduled,
-        body=f"Scheduled status → {STATUS_LABELS[payload.status]} on {payload.date.isoformat()}",
+        body=f"Scheduled status → {status_label(db, user.id, payload.status)} on {payload.date.isoformat()}",
         actor_email=user.email,
     )
     touch(todo)

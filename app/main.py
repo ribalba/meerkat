@@ -13,6 +13,7 @@ from .routers import (
     files,
     public,
     recurring,
+    statuses,
     sync,
     todos,
     unsubscribe,
@@ -42,6 +43,7 @@ app.include_router(files.router)
 app.include_router(sync.router)
 app.include_router(public.router)
 app.include_router(recurring.router)
+app.include_router(statuses.router)
 app.include_router(external.router)
 app.include_router(unsubscribe.router)
 app.include_router(watching.router)
