@@ -160,6 +160,14 @@ body.search-mode .bucket-row.active .bucket-name { font-weight: 400 !important; 
 #sync-now #pending-badge,
 #notif-btn #notif-badge { position: absolute; top: 2px; right: 0; }
 .card-bell { color: #fbbd08; margin-right: .35rem; }
+/* Small borderless indicators (watcher eye, schedule calendar). Spacing comes from
+   the .todo-pills flex gap so they sit evenly with the status/bucket labels. */
+.card-hint { color: #bbb; font-size: .82em; margin: 0; }
+/* Thin divider separating the status/bucket labels from the hint icons. */
+.pill-sep { color: #ddd; font-weight: normal; user-select: none; }
+/* Status/bucket labels and watcher/schedule icons are clickable shortcuts. */
+.card-action { cursor: pointer; }
+.card-action:hover { color: #666 !important; }
 .notif-item {
   padding: .6rem .4rem;
   border-bottom: 1px solid #f0f0f0;
@@ -368,6 +376,11 @@ body.resizing { cursor: col-resize; user-select: none; }
   border-top: 1px solid #d4d4d5;
   transform: rotate(45deg);
 }
+/* Point each popover's arrow at the button that opens it (watchers / schedule),
+   rather than the rightmost delete button. Offsets track the toolbar order:
+   from the right edge — delete, file, share, schedule, watchers. */
+#d-schedule-panel::before { right: 125px; }
+#d-watchers-panel::before { right: 163px; }
 .detail-popover-title {
   font-weight: 700;
   margin-bottom: .55rem;
@@ -531,11 +544,24 @@ body.resizing { cursor: col-resize; user-select: none; }
 
 /* Todo cards + tree */
 .todo-card { cursor: pointer; }
-.todo-card.ui.card { margin: 0 0 .4rem; }
+/* Drop Semantic UI's card border/shadow (a 0 0 0 1px ring + drop shadow) so the
+   task rows read as a flat list rather than boxed cards. */
+.todo-card.ui.card { margin: 0 0 .4rem; box-shadow: none; border: none; }
 .todo-card.ui.card > .content { padding: .55rem .8rem; }
 .todo-card .meta-row { margin-top: .25rem; color: #888; font-size: .82rem; }
 .todo-card .todo-main .header { font-size: .98rem; }
 .status-pill { text-transform: capitalize; flex: 0 0 auto; }
+
+/* Keep the status/bucket labels quiet: no heavy border or colour, just light grey
+   text so the task title stays the focus. */
+.todo-pills .ui.basic.label {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: #999;
+  font-weight: normal;
+  padding: .2em .3em;
+}
 
 .todo-row { display: flex; align-items: flex-start; gap: .6rem; }
 .todo-main { flex: 1; min-width: 0; }
@@ -588,6 +614,18 @@ body.resizing { cursor: col-resize; user-select: none; }
 .timeline-event .markdown img { max-width: 100%; }
 
 .markdown p:last-child { margin-bottom: 0; }
+
+/* Description: rendered markdown that swaps to a source textarea on click. */
+.d-text-preview {
+  min-height: 3.5rem;
+  padding: .65em 1em;
+  border: 1px solid rgba(34, 36, 38, .15);
+  border-radius: .28571429rem;
+  cursor: text;
+  white-space: normal;
+}
+.d-text-preview:hover { border-color: rgba(34, 36, 38, .35); }
+.d-text-preview.empty { color: #aaa; }
 
 /* Below 3-column width: the detail pane becomes a full-screen overlay. */
 @media (max-width: 991px) {

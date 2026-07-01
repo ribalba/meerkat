@@ -15,6 +15,7 @@ from .models import (
     Bucket,
     Event,
     EventType,
+    ScheduledStatusChange,
     Todo,
     TodoStatus,
     User,
@@ -243,9 +244,20 @@ def attach_to_todo(db: DBSession, todo: Todo) -> Todo:
 
 
 def attach_to_todos(db: DBSession, todos: list[Todo]) -> list[Todo]:
-    mapping = load_attachments(db, "todo", [t.id for t in todos])
+    ids = [t.id for t in todos]
+    mapping = load_attachments(db, "todo", ids)
+    scheduled = {
+        todo_id
+        for (todo_id,) in db.query(ScheduledStatusChange.todo_id)
+        .filter(
+            ScheduledStatusChange.todo_id.in_(ids),
+            ScheduledStatusChange.applied.is_(False),
+        )
+        .distinct()
+    } if ids else set()
     for t in todos:
         t.attachments = mapping.get(t.id, [])
+        t.has_schedule = t.id in scheduled
     return todos
 
 

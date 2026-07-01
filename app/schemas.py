@@ -251,6 +251,9 @@ class TodoOut(BaseModel):
     completed_at: datetime | None = None
     attachments: list[AttachmentOut] = []
     watchers: list[WatcherOut] = []
+    # True when the todo has a pending (unapplied) scheduled status change. Set by
+    # attach_to_todos on sync pull so the task list can show a calendar indicator.
+    has_schedule: bool = False
 
 
 # --- Sync ---

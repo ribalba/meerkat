@@ -30,8 +30,9 @@ services:
     ports:
       - "8086:8000"
     environment:
-      # Public URL used to build login + share links in emails.
-      BASE_URL: ${BASE_URL:-http://localhost:8000}
+      # Public URL used to build login + share links in emails. Must match the
+      # host-published port below (8086 -> container 8000), not the internal port.
+      BASE_URL: ${BASE_URL:-http://localhost:8086}
       # CHANGE THIS in production.
       SECRET_KEY: ${SECRET_KEY:-dev-insecure-secret-change-me}
       # PostgreSQL (the bundled "db" service).

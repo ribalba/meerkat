@@ -251,10 +251,11 @@ def create_schedule(
 def cancel_schedule(
     todo_id: str, schedule_id: str, db: DBSession = Depends(get_db), user=Depends(get_current_user)
 ):
-    get_owned_todo(db, todo_id, user)
+    todo = get_owned_todo(db, todo_id, user)
     sched = db.get(ScheduledStatusChange, schedule_id)
     if sched is None or sched.todo_id != todo_id:
         raise HTTPException(status_code=404, detail="Schedule not found")
     db.delete(sched)
+    touch(todo)  # bump updated_at so the cleared schedule syncs to the task list
     db.commit()
     return {"ok": True}

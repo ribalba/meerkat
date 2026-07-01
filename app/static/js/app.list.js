@@ -5,7 +5,7 @@
 
   const App = window.App;
   const {
-    $, esc, state, toast, errText, STATUS, statusOf,
+    $, esc, state, toast, errText, STATUS,
     liveBuckets, liveTodos, bucketName, labelOf, viewMeta, getViewOrder,
     parseSearch, searchMatch, unreadByTask, updateBellBadge, refreshEmailSuggestions,
   } = App;
@@ -141,17 +141,27 @@
       return sortTasks(kids);
     };
     function nodeHtml(t) {
-      const s = statusOf(t.status);
       const done = t.status === "done";
       const pill = opts.showPill
-        ? `<span class="ui ${s.color} label status-pill"><i class="${s.icon} icon"></i>${labelOf(t.status)}</span>`
+        ? `<span class="ui basic label status-pill card-action" data-focus="status" title="Change status">${labelOf(t.status)}</span>`
         : "";
       const bucketLabel = opts.showBucket
-        ? `<span class="ui basic label bucket-pill"><i class="folder outline icon"></i>${esc(bucketName(buckets, t.bucket_id))}</span>`
+        ? `<span class="ui basic label bucket-pill card-action" data-focus="bucket" title="Move to bucket">${esc(bucketName(buckets, t.bucket_id))}</span>`
         : "";
       const bell = unread[t.id]
         ? `<i class="bell icon card-bell" title="New comment"></i>`
         : "";
+      // Borderless light-grey hints: an eye when the task has a watcher, a
+      // calendar when a status change is scheduled.
+      const eye = t.watchers && t.watchers.length
+        ? `<i class="eye icon card-hint card-action" data-focus="watchers" title="Watchers"></i>`
+        : "";
+      const cal = t.has_schedule
+        ? `<i class="calendar alternate outline icon card-hint card-action" data-focus="schedule" title="Scheduled status change"></i>`
+        : "";
+      // Thin divider between the status/bucket labels and the hint icons, only when
+      // both sides are actually present.
+      const sep = (pill || bucketLabel) && (eye || cal) ? `<span class="pill-sep">|</span>` : "";
       const childHtml = opts.tree ? childrenOf(t.id).map(nodeHtml).join("") : "";
       return `
         <div class="todo-node">
@@ -162,7 +172,7 @@
                 <div class="todo-main">
                   <div class="header" style="${done ? "text-decoration:line-through" : ""}">${bell}${esc(t.title)}</div>
                 </div>
-                <div class="todo-pills">${pill}${bucketLabel}</div>
+                <div class="todo-pills">${pill}${bucketLabel}${sep}${eye}${cal}</div>
               </div>
             </div>
           </div>
@@ -194,6 +204,12 @@
           status: this.checked ? "done" : "open",
         });
       });
+    // Clicking a status/bucket label or a watcher/schedule icon opens the task and
+    // jumps straight to that control instead of the plain detail view.
+    $("#todo-list .card-action").on("click", function (e) {
+      e.stopPropagation();
+      App.openTodo($(this).closest(".todo-card").data("id"), $(this).data("focus"));
+    });
     $("#todo-list .todo-card").on("click", function () {
       App.openTodo($(this).data("id"));
     });

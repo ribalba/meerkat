@@ -13,6 +13,10 @@ services:
       # Dev runs on a different host port (8087) so it can sit alongside a
       # production stack (8086) without a clash.
       - "8087:8000"
+    environment:
+      # Email links must point at this overlay's host-published port (8087),
+      # not the base file's 8086.
+      BASE_URL: ${BASE_URL:-http://localhost:8087}
     volumes:
       # Mount the project source over the image's /app for edit-on-save. The
       # base file's todo-data:/data mount is merged in automatically, so uploads

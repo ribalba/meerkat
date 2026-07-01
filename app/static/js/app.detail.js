@@ -11,8 +11,14 @@
     isValidEmail, initEmailSearch, markCommentsSeen, updateBellBadge,
   } = App;
 
-  async function openTodo(id) {
+  // `focus` optionally jumps straight to a control after the pane renders:
+  // 'status' | 'bucket' open that dropdown, 'watchers' | 'schedule' expand that panel.
+  async function openTodo(id, focus) {
     state.currentTodoId = id;
+    state.editingDescription = false;
+    // Pre-set the popovers so the requested one renders expanded (and the others closed).
+    state.watchersOpen = focus === "watchers";
+    state.scheduleOpen = focus === "schedule";
     $("body").addClass("detail-open");
     App.applyDetailWidth();
     await refreshOpenTodo();
@@ -23,11 +29,17 @@
     // Highlight the open task in the list.
     $("#todo-list .todo-card").removeClass("selected");
     $(`#todo-list .todo-card[data-id="${id}"]`).addClass("selected");
+    // Surface the requested control. Dropdowns are shown after render; the schedule
+    // panel needs its list fetched just like its own toggle does.
+    if (focus === "status") $("#d-status-btn").dropdown("show");
+    else if (focus === "bucket") $("#d-bucket-btn").dropdown("show");
+    else if (focus === "schedule") loadSchedules(id);
   }
 
   function closeDetail() {
     state.currentTodoId = null;
     state.currentWatchToken = null;
+    state.editingDescription = false;
     $("body").removeClass("detail-open");
     $("#todo-list .todo-card").removeClass("selected");
   }
@@ -40,6 +52,9 @@
 
   async function refreshOpenTodo() {
     const id = state.currentTodoId;
+    // A background sync must not re-render the pane while the description is being
+    // edited — that would recreate the textarea and drop the user's focus/edit.
+    if (state.editingDescription) return;
     const todo = await DB.get("todos", id);
     if (!todo || todo.deleted) {
       closeDetail();
@@ -68,7 +83,7 @@
     return `
       <div class="detail-top">
         <div class="detail-controls">
-          <div class="ui ${s.color} floating dropdown icon button" id="d-status-btn" title="Status: ${labelOf(todo.status)}">
+          <div class="ui basic floating dropdown icon button" id="d-status-btn" title="Status: ${labelOf(todo.status)}">
             <i class="${s.icon} icon"></i>
             <div class="menu">
               ${STATUS.map((o) => {
@@ -80,8 +95,8 @@
             </div>
           </div>
           ${todo.parent_id
-            ? `<button class="ui disabled icon button" title="Bucket: ${esc(bName)} (inherited from parent task)"><i class="folder icon"></i></button>`
-            : `<div class="ui floating dropdown icon button" id="d-bucket-btn" title="Bucket: ${esc(bName)}">
+            ? `<button class="ui basic disabled icon button" title="Bucket: ${esc(bName)} (inherited from parent task)"><i class="folder icon"></i></button>`
+            : `<div class="ui basic floating dropdown icon button" id="d-bucket-btn" title="Bucket: ${esc(bName)}">
                 <i class="folder icon"></i>
                 <div class="menu">
                   ${buckets.map((b) => {
@@ -91,20 +106,20 @@
                   }).join("")}
                 </div>
               </div>`}
-          <button class="ui ${watchers.length ? "green " : ""}icon button" id="d-watchers-btn"
+          <button class="ui basic icon button" id="d-watchers-btn"
                   title="Watchers${watchers.length ? ` (${watchers.length})` : ""}">
             <i class="eye icon"></i>
           </button>
-          <button class="ui icon button" id="d-file-btn" title="Attach a file" ${online ? "" : "disabled"}>
-            <i class="upload icon"></i>
-          </button>
-          <button class="ui icon button" id="d-schedule-btn" title="Schedule a status change" ${online ? "" : "disabled"}>
+          <button class="ui basic icon button" id="d-schedule-btn" title="Schedule a status change" ${online ? "" : "disabled"}>
             <i class="calendar alternate outline icon"></i>
           </button>
-          <button class="ui basic ${shareReady ? "blue" : "disabled"} icon button" id="d-share" title="Copy share link">
+          <button class="ui basic ${shareReady ? "" : "disabled"} icon button" id="d-share" title="Copy share link">
             <i class="share alternate icon"></i>
           </button>
-          <button class="ui basic red icon button" id="d-delete" title="Delete task"><i class="trash icon"></i></button>
+          <button class="ui basic icon button" id="d-file-btn" title="Attach a file" ${online ? "" : "disabled"}>
+            <i class="upload icon"></i>
+          </button>
+          <button class="ui basic icon button" id="d-delete" title="Delete task"><i class="trash icon"></i></button>
 
           <div id="d-watchers-panel" class="detail-popover" style="display:${state.watchersOpen ? "block" : "none"}">
             <div class="detail-popover-title"><i class="eye icon"></i> Watchers</div>
@@ -149,7 +164,8 @@
 
       <h4 class="ui horizontal divider header"><i class="align left icon"></i> Description</h4>
       <div class="ui form">
-        <textarea id="d-text" rows="4" placeholder="Markdown supported…">${esc(todo.text || "")}</textarea>
+        <div id="d-text-preview" class="markdown d-text-preview${(todo.text || "").trim() ? "" : " empty"}" title="Click to edit">${(todo.text || "").trim() ? MD.render(todo.text) : "Markdown supported… (click to edit)"}</div>
+        <textarea id="d-text" rows="4" placeholder="Markdown supported…" style="display:none">${esc(todo.text || "")}</textarea>
       </div>
 
       <h4 class="ui horizontal divider header"><i class="sitemap icon"></i> Subtasks</h4>
@@ -298,13 +314,35 @@
       if (v && v !== todo.title) await Sync.mutate("todo", "update", id, { title: v });
     });
 
-    // Auto-save the description when focus leaves the textarea, if it changed.
-    $("#d-text").on("blur", async function () {
+    // Description is shown as rendered markdown; clicking swaps in the raw-source
+    // textarea, and blurring saves (if changed) and swaps the rendered view back.
+    const $text = $("#d-text");
+    const $preview = $("#d-text-preview");
+    const renderPreview = (raw) => {
+      const trimmed = (raw || "").trim();
+      $preview
+        .html(trimmed ? MD.render(raw) : "Markdown supported… (click to edit)")
+        .toggleClass("empty", !trimmed)
+        .show();
+      $text.hide();
+    };
+    $preview.on("click", () => {
+      state.editingDescription = true;
+      $preview.hide();
+      $text.show().focus();
+      // Place the cursor at the end of the source.
+      const el = $text[0];
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+    $text.on("blur", async function () {
+      state.editingDescription = false;
       const v = $(this).val();
       if (v !== (todo.text || "")) {
         await Sync.mutate("todo", "update", id, { text: v });
+        todo.text = v;
         toast("Description saved");
       }
+      renderPreview(v);
     });
 
     $("#d-delete").on("click", async () => {
