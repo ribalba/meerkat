@@ -546,6 +546,84 @@
             </tbody>
           </table>
         </div>
+
+        <!-- ===== Settings panel ===== -->
+        <div id="settings-panel" class="main-panel" style="display:none">
+          <div class="settings-panel-head">
+            <h3 class="ui header"><i class="cog icon"></i>
+              <div class="content">Settings</div>
+            </h3>
+            <button class="ui basic button" id="settings-back"><i class="arrow left icon"></i> Back</button>
+          </div>
+
+          <h4 class="ui horizontal divider header"><i class="user circle icon"></i> Account</h4>
+          <p>Signed in as <strong id="settings-email"></strong></p>
+          <div class="ui form" style="max-width:340px;margin-bottom:1rem">
+            <div class="field">
+              <label>Your name</label>
+              <input type="text" id="profile-name" placeholder="e.g. Alice Smith" />
+              <div style="color:#888;font-size:.85em;margin-top:.3rem">Shown in notification emails to a task's watchers.</div>
+            </div>
+          </div>
+          <button class="ui red button" id="logout"><i class="sign out icon"></i> Logout</button>
+
+          <h4 class="ui horizontal divider header"><i class="globe icon"></i> Timezone</h4>
+          <p style="color:#888">Determines when your scheduled status changes take effect.</p>
+          <select id="tz-select" class="ui dropdown" style="max-width:340px"></select>
+
+          <h4 class="ui horizontal divider header"><i class="plus square outline icon"></i> New tasks</h4>
+          <p style="color:#888">Defaults used when you add a task from the top bar (unless you've filtered to a specific bucket or status).</p>
+          <div class="ui form">
+            <div class="two fields">
+              <div class="field">
+                <label>Default bucket</label>
+                <select id="default-bucket" class="ui dropdown"></select>
+              </div>
+              <div class="field">
+                <label>Default status</label>
+                <select id="default-status" class="ui dropdown"></select>
+              </div>
+            </div>
+          </div>
+
+          <h4 class="ui horizontal divider header"><i class="tags icon"></i> Custom statuses</h4>
+          <p style="color:#888">Add your own statuses alongside the built-in Backlog, Now, Blocked and Done. They appear in the sidebar, the task list and every status dropdown. Deleting one moves its tasks back to Backlog.</p>
+          <div class="ui middle aligned divided list" id="custom-status-list"></div>
+          <div class="ui form" style="margin-top:.8rem">
+            <div class="fields">
+              <div class="six wide field">
+                <label>Name</label>
+                <input type="text" id="cs-label" placeholder="e.g. In review" maxlength="60" />
+              </div>
+              <div class="four wide field">
+                <label>Colour</label>
+                <select id="cs-color" class="ui dropdown"></select>
+              </div>
+              <div class="four wide field">
+                <label>Icon</label>
+                <input type="text" id="cs-icon" placeholder="e.g. eye" />
+              </div>
+              <div class="two wide field">
+                <label>&nbsp;</label>
+                <button class="ui primary fluid icon button" id="cs-add" title="Add status"><i class="plus icon"></i></button>
+              </div>
+            </div>
+            <div style="color:#888;font-size:.85em">Icon names come from <a href="https://fomantic-ui.com/elements/icon.html" target="_blank" rel="noopener">Fomantic UI</a> (e.g. "eye", "star", "bug").</div>
+          </div>
+
+          <h4 class="ui horizontal divider header"><i class="sort icon"></i> Sidebar order</h4>
+          <p style="color:#888">Use the arrows to reorder the views shown in the sidebar.</p>
+          <div class="ui middle aligned divided list" id="status-order-list"></div>
+
+          <h4 class="ui horizontal divider header"><i class="info circle icon"></i> About</h4>
+          <p>
+            <strong>meerato</strong> is the hosted service. It is open source as the
+            <strong>meerkat</strong> project:
+            <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">
+              <i class="github icon"></i>github.com/ribalba/meerkat</a>
+          </p>
+          <p><a id="settings-terms-link" style="cursor:pointer">Terms &amp; service provider</a></p>
+        </div>
       </main>
 
       <div id="detail-resizer" title="Drag to resize"></div>
@@ -576,80 +654,6 @@
 
 
   </div>
-
-  <!-- ===== Settings page ===== -->
-  <div id="settings" style="display:none">
-    <div class="ui inverted blue menu" style="margin:0;border-radius:0">
-      <a class="item" id="settings-back"><i class="arrow left icon"></i> Back</a>
-      <div class="header item"><i class="cog icon"></i>&nbsp;Settings</div>
-    </div>
-    <div class="ui container" style="max-width:680px !important;padding:1.5rem 1rem 4rem">
-      <h4 class="ui horizontal divider header"><i class="user circle icon"></i> Account</h4>
-      <p>Signed in as <strong id="settings-email"></strong></p>
-      <div class="ui form" style="max-width:340px;margin-bottom:1rem">
-        <div class="field">
-          <label>Your name</label>
-          <input type="text" id="profile-name" placeholder="e.g. Alice Smith" />
-          <div style="color:#888;font-size:.85em;margin-top:.3rem">Shown in notification emails to a task's watchers.</div>
-        </div>
-      </div>
-      <button class="ui red button" id="logout"><i class="sign out icon"></i> Logout</button>
-
-      <h4 class="ui horizontal divider header"><i class="globe icon"></i> Timezone</h4>
-      <p style="color:#888">Determines when your scheduled status changes take effect.</p>
-      <select id="tz-select" class="ui dropdown" style="max-width:340px"></select>
-
-      <h4 class="ui horizontal divider header"><i class="plus square outline icon"></i> New tasks</h4>
-      <p style="color:#888">Defaults used when you add a task from the top bar (unless you've filtered to a specific bucket or status).</p>
-      <div class="ui form">
-        <div class="two fields">
-          <div class="field">
-            <label>Default bucket</label>
-            <select id="default-bucket" class="ui dropdown"></select>
-          </div>
-          <div class="field">
-            <label>Default status</label>
-            <select id="default-status" class="ui dropdown"></select>
-          </div>
-        </div>
-      </div>
-
-      <h4 class="ui horizontal divider header"><i class="tags icon"></i> Custom statuses</h4>
-      <p style="color:#888">Add your own statuses alongside the built-in Backlog, Now, Blocked and Done. Deleting one moves its tasks back to Backlog.</p>
-      <div class="ui middle aligned divided list" id="custom-status-list"></div>
-      <div class="ui form" style="margin-top:.8rem">
-        <div class="fields">
-          <div class="six wide field">
-            <input type="text" id="cs-label" placeholder="Name, e.g. In review" maxlength="60" />
-          </div>
-          <div class="four wide field">
-            <select id="cs-color" class="ui dropdown"></select>
-          </div>
-          <div class="four wide field">
-            <input type="text" id="cs-icon" placeholder="Icon, e.g. eye" />
-          </div>
-          <div class="two wide field">
-            <button class="ui primary icon button" id="cs-add" title="Add status"><i class="plus icon"></i></button>
-          </div>
-        </div>
-        <div style="color:#888;font-size:.85em">Icon names come from <a href="https://fomantic-ui.com/elements/icon.html" target="_blank" rel="noopener">Fomantic UI</a> (e.g. "eye", "star", "bug").</div>
-      </div>
-
-      <h4 class="ui horizontal divider header"><i class="sort icon"></i> Sidebar order</h4>
-      <p style="color:#888">Use the arrows to reorder the views shown in the sidebar.</p>
-      <div class="ui middle aligned divided list" id="status-order-list"></div>
-
-      <h4 class="ui horizontal divider header"><i class="info circle icon"></i> About</h4>
-      <p>
-        <strong>meerato</strong> is the hosted service. It is open source as the
-        <strong>meerkat</strong> project:
-        <a href="https://github.com/ribalba/meerkat" target="_blank" rel="noopener">
-          <i class="github icon"></i>github.com/ribalba/meerkat</a>
-      </p>
-      <p><a id="settings-terms-link" style="cursor:pointer">Terms &amp; service provider</a></p>
-    </div>
-  </div>
-
 
   <!-- ===== "Use with software" modal (per-tool reveals) ===== -->
   <div class="ui modal" id="api-software-modal">

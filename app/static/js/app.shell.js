@@ -262,8 +262,6 @@
     });
     $("#default-bucket").on("change", function () { DB.setMeta("default_bucket", this.value); });
     $("#default-status").on("change", function () { DB.setMeta("default_status", this.value); });
-    $("#cs-add").on("click", addCustomStatus);
-    $("#cs-label, #cs-icon").on("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addCustomStatus(); } });
     $("#tz-select").on("change", async function () {
       try {
         const u = await API.patch("/api/auth/me", { timezone: this.value });
@@ -284,6 +282,12 @@
 
     // Watching (tasks shared with me): a main-pane view, like the status filters.
     $("#watching-btn").on("click", enterWatching);
+
+    // Custom statuses (managed in the Settings panel).
+    $("#cs-add").on("click", addCustomStatus);
+    $("#cs-label, #cs-icon").on("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); addCustomStatus(); }
+    });
 
     // Automation (recurring tasks): a main-pane panel, like the Watching view.
     $("#automation-btn").on("click", () => App.showAutomation());
@@ -399,9 +403,9 @@
     App.renderAll();
   }
 
-  // ===================== Main-pane panels (Automation / API) =====================
-  // Automation and API live in the main content area, swapping in for the task
-  // list (like the Watching view) rather than opening a separate full page.
+  // ===================== Main-pane panels (Automation / API / Settings) =========
+  // Automation, API and Settings live in the main content area, swapping in for
+  // the task list (like the Watching view) rather than opening a separate page.
 
   // Show one of the main-pane panels, hiding the task-list chrome.
   function enterMainPanel(name) {
@@ -412,10 +416,12 @@
     $("#quick-add, #search-bar, #todo-list, #empty-state").hide();
     $("#automation-panel").toggle(name === "automation");
     $("#api-panel").toggle(name === "api");
+    $("#settings-panel").toggle(name === "settings");
     // The panel buttons own the "active" highlight while a panel is open.
     $("#views-menu .status-link, #watching-btn").removeClass("active");
     $("#automation-btn").toggleClass("active", name === "automation");
     $("#api-btn").toggleClass("active", name === "api");
+    $("#settings-btn").toggleClass("active", name === "settings");
     $("body").removeClass("rail-open");
   }
 
@@ -423,9 +429,9 @@
   function exitMainPanel() {
     if (!state.panel) return;
     state.panel = null;
-    $("#automation-panel, #api-panel").hide();
+    $("#automation-panel, #api-panel, #settings-panel").hide();
     $("#quick-add, #todo-list").show();
-    $("#automation-btn, #api-btn").removeClass("active");
+    $("#automation-btn, #api-btn, #settings-btn").removeClass("active");
   }
 
   // ===================== Search =====================
@@ -521,23 +527,21 @@
   }
 
   function showSettings() {
+    enterMainPanel("settings");
     $("#settings-email").text(state.user.email);
     $("#profile-name").val(state.user.name || "");
     renderCustomStatuses();
     renderViewOrderEditor();
     renderNewTaskDefaults();
     renderTimezone();
-    $("#app").hide();
-    $("#settings").show();
   }
 
   async function hideSettings() {
-    $("#settings").hide();
-    $("#app").css("display", "flex");
-    await App.renderViews(); // ensure the sidebar reflects any new order
+    exitMainPanel();
+    await App.renderAll(); // restore the task list + reflect any new order/statuses
   }
 
-  // ---- Custom statuses (Settings) ----
+  // ---- Custom statuses (Settings panel) ----
   // Fomantic UI's named colours, offered in the colour picker.
   const STATUS_COLORS = [
     "grey", "black", "red", "orange", "yellow", "olive", "green",
@@ -565,6 +569,7 @@
     $("#custom-status-list .cs-del").on("click", function () {
       deleteCustomStatus($(this).closest(".item").data("id"));
     });
+    // Populate the colour picker once.
     if (!$("#cs-color option").length) {
       $("#cs-color").html(STATUS_COLORS.map((c) => `<option value="${c}">${c}</option>`).join(""));
     }
@@ -593,14 +598,14 @@
     try {
       await API.del(`/api/statuses/${id}`);
       await refreshAfterStatusChange();
-      await App.renderAll(); // tasks moved back to Backlog need re-rendering
       toast("Status removed");
     } catch (e) {
       toast(errText(e), "error");
     }
   }
 
-  // Reload the status list and re-render everything that displays statuses.
+  // Reload statuses and re-render the Settings editors + sidebar. The task list
+  // is behind the panel; it re-renders when Settings is closed (hideSettings).
   async function refreshAfterStatusChange() {
     await App.loadStatuses();
     renderCustomStatuses();

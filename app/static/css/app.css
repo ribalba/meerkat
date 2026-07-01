@@ -1006,6 +1006,15 @@ body.resizing { cursor: col-resize; user-select: none; }
 .main-panel { max-width: 760px; }
 .main-panel > .ui.header:first-child { margin-bottom: 1rem; }
 
+/* Settings panel header: title on the left, Back button on the right. */
+.settings-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.settings-panel-head > .ui.header { margin: 0; }
+
 .api-curl-block {
   background: #1b1c1d; color: #e8e8e8; border-radius: 6px;
   padding: 1rem; font-family: monospace; font-size: .85rem;

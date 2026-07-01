@@ -33,6 +33,7 @@
     $("#watching-btn").toggleClass("active", state.watching);
     $("#automation-btn").toggleClass("active", state.panel === "automation");
     $("#api-btn").toggleClass("active", state.panel === "api");
+    $("#settings-btn").toggleClass("active", state.panel === "settings");
   }
 
   // ===================== Bucket rail =====================
