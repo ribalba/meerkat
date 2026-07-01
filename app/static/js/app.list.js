@@ -210,6 +210,13 @@
     const bucket = bucketId ? await DB.get("buckets", bucketId) : null;
     $("#bucket-modal-title").text(bucket ? "Rename bucket" : "New bucket");
     $("#bucket-name").val(bucket ? bucket.name : "");
+    // Pressing Enter in the name field submits the form; intercept it so it
+    // approves the modal instead of triggering the browser's default submit
+    // (which would blur the modal and refocus the main window).
+    $("#bucket-form").off("submit.bucket").on("submit.bucket", (e) => {
+      e.preventDefault();
+      $("#bucket-modal .approve.button").click();
+    });
     $("#bucket-modal")
       .modal({
         onApprove: async () => {
